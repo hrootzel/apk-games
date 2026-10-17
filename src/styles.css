@@ -1,0 +1,209 @@
+:root {
+  color-scheme: dark;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #010302;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #010302;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+  --scanline-alpha: 0.18;
+  --vignette-alpha: 0.32;
+}
+
+.game-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#app::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, calc(var(--scanline-alpha) * 0.10)) 0,
+      rgba(255, 255, 255, calc(var(--scanline-alpha) * 0.10)) 1px,
+      rgba(0, 0, 0, calc(var(--scanline-alpha) * 0.38)) 2px,
+      rgba(0, 0, 0, calc(var(--scanline-alpha) * 0.38)) 3px
+    ),
+    radial-gradient(
+      ellipse at center,
+      transparent 47%,
+      rgba(0, 8, 5, calc(var(--vignette-alpha) * 0.42)) 76%,
+      rgba(0, 0, 0, var(--vignette-alpha)) 100%
+    );
+  mix-blend-mode: normal;
+}
+
+.touch-overlay {
+  --control-opacity: 0.28;
+  position: absolute;
+  inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  z-index: 10;
+  pointer-events: none;
+  color: rgba(120, 244, 255, var(--control-opacity));
+}
+
+.zone {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: rgba(120, 244, 255, calc(var(--control-opacity) * 0.6));
+  color: rgba(150, 248, 255, var(--control-opacity));
+  text-shadow: 0 0 12px rgba(60, 220, 255, calc(var(--control-opacity) * 0.8));
+  font-size: clamp(16px, 2vw, 30px);
+  letter-spacing: 0.2em;
+  transition: background-color 60ms linear, color 60ms linear;
+}
+
+.zone.active {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(90, 235, 255, 0.10);
+}
+
+.zone.strip.top {
+  top: 0;
+  height: 10.5%;
+  border-bottom: 1px solid;
+}
+
+.zone.strip.bottom {
+  bottom: 0;
+  height: 10.5%;
+  border-top: 1px solid;
+  font-size: clamp(10px, 1.2vw, 18px);
+}
+
+.zone.left { left: 0; width: 50%; }
+.zone.right { right: 0; width: 50%; }
+
+.zone.face {
+  height: 39.5%;
+  width: 50%;
+  font-size: clamp(26px, 4.5vw, 68px);
+}
+
+.zone.face.upper { top: 10.5%; }
+.zone.face.lower { bottom: 10.5%; }
+.zone.face.left { border-right: 1px solid rgba(120, 244, 255, calc(var(--control-opacity) * 0.22)); }
+.zone.face.upper { border-bottom: 1px solid rgba(120, 244, 255, calc(var(--control-opacity) * 0.22)); }
+
+.joystick-shell {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(38vw, 38vh);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+
+.joystick-ring {
+  position: absolute;
+  inset: 2%;
+  border: 1px solid rgba(120, 244, 255, calc(var(--control-opacity) * 0.85));
+  border-radius: 50%;
+  box-shadow: inset 0 0 22px rgba(80, 235, 255, calc(var(--control-opacity) * 0.18)), 0 0 18px rgba(80, 235, 255, calc(var(--control-opacity) * 0.15));
+}
+
+.joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(210, 255, 255, calc(var(--control-opacity) * 0.95));
+  border-radius: 50%;
+  background: rgba(80, 235, 255, calc(var(--control-opacity) * 0.08));
+  box-shadow: 0 0 16px rgba(100, 245, 255, calc(var(--control-opacity) * 0.4));
+}
+
+.settings-panel {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  top: 50%;
+  width: min(680px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  padding: 18px 20px 22px;
+  border: 1px solid rgba(112, 249, 221, 0.68);
+  background: rgba(0, 12, 9, 0.94);
+  color: #aaffdf;
+  box-shadow: 0 0 30px rgba(20, 255, 190, 0.18), inset 0 0 24px rgba(20, 255, 190, 0.06);
+  touch-action: auto;
+}
+
+.settings-panel.hidden { display: none; }
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  letter-spacing: 0.13em;
+  font-size: 14px;
+}
+
+.settings-close {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(112, 249, 221, 0.5);
+  color: #caffef;
+  background: transparent;
+  font-size: 24px;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(180px, 2fr) 70px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.settings-row input { width: 100%; }
+.settings-row output { text-align: right; color: #eafff8; }
+.settings-help { margin-top: 14px; line-height: 1.55; color: rgba(190, 255, 235, 0.66); font-size: 11px; }
+
+@media (max-width: 700px) {
+  .settings-row {
+    grid-template-columns: 1fr 72px;
+  }
+  .settings-row input {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}

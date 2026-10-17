@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd /workspace
+
+# Hard quality gate: typecheck, unit coverage, production web build, and
+# Chromium/Pixi/WebGL integration tests must all pass before Gradle runs.
+./scripts/test.sh
+
+if [[ ! -d android ]]; then
+  echo "[android] Creating Capacitor Android project..."
+  npx cap add android
+fi
+
+npx cap sync android
+chmod +x android/gradlew
+mkdir -p out .cache/gradle
+
+(
+  cd android
+  GRADLE_USER_HOME=/workspace/.cache/gradle ./gradlew --no-daemon assembleDebug
+)
+
+cp android/app/build/outputs/apk/debug/app-debug.apk out/vector-asteroids-debug.apk
+echo "APK: /workspace/out/vector-asteroids-debug.apk"

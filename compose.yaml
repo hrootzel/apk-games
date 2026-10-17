@@ -1,0 +1,42 @@
+x-toolchain: &toolchain
+  build:
+    context: .
+  working_dir: /workspace
+  user: node
+  volumes:
+    - .:/workspace
+  environment:
+    npm_config_cache: /workspace/.cache/npm
+    GRADLE_USER_HOME: /workspace/.cache/gradle
+    PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+
+services:
+  shell:
+    <<: *toolchain
+    init: true
+    ipc: host
+    stdin_open: true
+    tty: true
+    command: bash
+
+  dev:
+    <<: *toolchain
+    ports:
+      - "5173:5173"
+    command: ./scripts/dev.sh
+
+  web:
+    <<: *toolchain
+    command: ./scripts/build-web.sh
+
+  test:
+    <<: *toolchain
+    init: true
+    ipc: host
+    command: ./scripts/test.sh
+
+  apk:
+    <<: *toolchain
+    init: true
+    ipc: host
+    command: ./scripts/build-apk.sh
