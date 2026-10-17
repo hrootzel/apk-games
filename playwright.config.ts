@@ -6,7 +6,8 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   timeout: 30_000,
-  reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }]],
+  outputDir: 'out/test-results',
+  reporter: [['list'], ['html', { outputFolder: 'out/playwright-report', open: 'never' }]],
   use: {
     browserName: 'chromium',
     baseURL: 'http://127.0.0.1:4173',
@@ -22,6 +23,7 @@ export default defineConfig({
         '--enable-webgl',
         '--use-gl=angle',
         '--use-angle=swiftshader',
+        '--window-size=1280,960',
       ],
     },
   },

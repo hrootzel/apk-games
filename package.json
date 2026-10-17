@@ -1,7 +1,7 @@
 {
   "name": "vector-arcade",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.4.3",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,8 +14,9 @@
     "test": "vitest run",
     "test:unit": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "playwright test",
-    "test:ci": "npm run typecheck && npm run test:coverage && npm run build:web && npm run test:e2e"
+    "test:e2e": "./scripts/test-e2e.sh",
+    "test:ci": "npm run typecheck && npm run test:coverage && npm run build:web && npm run test:e2e",
+    "test:e2e:plain": "playwright test"
   },
   "dependencies": {
     "@capacitor/android": "^8.0.0",

@@ -63,6 +63,46 @@ export class TouchController {
     this.overlay.classList.toggle('hidden', !visible);
   }
 
+
+  /**
+   * Test-only input injection used by the browser E2E bridge. Production input
+   * still comes exclusively from Pointer Events and keyboard events; these
+   * methods are only exposed by main.ts when the app is loaded with ?e2e=1.
+   */
+  debugSetButton(button: ButtonName, pressed: boolean, pointerId = 9000): void {
+    const pointers = this.pressed.get(button);
+    if (!pointers) return;
+    if (pressed) pointers.add(pointerId);
+    else pointers.delete(pointerId);
+    this.updateButtonVisual(button);
+  }
+
+  debugSetJoystick(x: number, y: number): void {
+    const clampedX = Math.max(-1, Math.min(1, Number.isFinite(x) ? x : 0));
+    const clampedY = Math.max(-1, Math.min(1, Number.isFinite(y) ? y : 0));
+    const length = Math.hypot(clampedX, clampedY);
+    const scale = length > 1 ? 1 / length : 1;
+    this.joystick = { x: clampedX * scale, y: clampedY * scale };
+
+    const rect = this.root.getBoundingClientRect();
+    const radius = Math.max(1, Math.min(rect.width, rect.height) * 0.155);
+    const px = this.joystick.x * radius;
+    const py = this.joystick.y * radius;
+    this.joystickKnob.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;
+  }
+
+  debugResetInput(): void {
+    this.pointerBindings.clear();
+    this.joystickPointer = null;
+    this.joystick = { x: 0, y: 0 };
+    this.keys.clear();
+    for (const button of BUTTONS) {
+      this.pressed.get(button)?.clear();
+      this.updateButtonVisual(button);
+    }
+    this.joystickKnob.style.transform = 'translate(-50%, -50%)';
+  }
+
   snapshot(): InputSnapshot {
     const keyboardTurn = (this.keys.has('ArrowRight') ? 1 : 0) - (this.keys.has('ArrowLeft') ? 1 : 0);
     const keyboardVertical = (this.keys.has('ArrowDown') ? 1 : 0) - (this.keys.has('ArrowUp') ? 1 : 0);

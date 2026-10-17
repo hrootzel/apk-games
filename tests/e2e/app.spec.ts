@@ -1,22 +1,83 @@
 import { expect, test, type Page } from '@playwright/test';
+import type { ButtonName } from '../../src/game/types';
+import type { ArcadeDebugSnapshot, VectorArcadeDebugWindow } from '../../src/app/debugTypes';
+
+async function snapshot(page: Page): Promise<ArcadeDebugSnapshot> {
+  return page.evaluate(() => {
+    const bridge = (window as VectorArcadeDebugWindow).__VECTOR_ARCADE_DEBUG__;
+    if (!bridge) throw new Error('Missing E2E bridge');
+    return bridge.snapshot();
+  });
+}
 
 async function waitForArcade(page: Page) {
   await page.goto('/?e2e=1');
-  await page.waitForFunction(() => Boolean(window.__VECTOR_ARCADE_DEBUG__?.snapshot().frameCount));
+  await page.waitForFunction(() => Boolean((window as VectorArcadeDebugWindow).__VECTOR_ARCADE_DEBUG__));
+  await expect.poll(async () => (await snapshot(page)).mode, { timeout: 15_000 }).toBe('menu');
+  await expect(page.locator('canvas.game-canvas')).toBeVisible();
 }
 
 async function launch(page: Page, gameId: 'asteroids' | 'tempest') {
   await waitForArcade(page);
   await page.locator(`.arcade-menu-item[data-entry-id="${gameId}"]`).click();
-  await expect.poll(async () => (await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot().activeGameId))).toBe(gameId);
+  await expect.poll(async () => (await snapshot(page)).activeGameId, { timeout: 15_000 }).toBe(gameId);
 }
 
-async function pointer(page: Page, type: 'pointerdown' | 'pointermove' | 'pointerup', pointerId: number, x: number, y: number) {
+async function setButton(page: Page, button: ButtonName, pressed: boolean, pointerId = 9000) {
   await page.evaluate(
-    ({ type, pointerId, x, y }) => {
-      const root = document.querySelector<HTMLElement>('#app');
-      if (!root) throw new Error('Missing #app');
-      root.dispatchEvent(new PointerEvent(type, {
+    ({ button, pressed, pointerId }) => {
+      const bridge = (window as VectorArcadeDebugWindow).__VECTOR_ARCADE_DEBUG__;
+      if (!bridge) throw new Error('Missing E2E bridge');
+      if (pressed) bridge.input.press(button, pointerId);
+      else bridge.input.release(button, pointerId);
+    },
+    { button, pressed, pointerId },
+  );
+}
+
+async function setButtonsAtomic(
+  page: Page,
+  changes: Array<{ button: ButtonName; pressed: boolean; pointerId: number }>,
+) {
+  await page.evaluate((changes) => {
+    const bridge = (window as VectorArcadeDebugWindow).__VECTOR_ARCADE_DEBUG__;
+    if (!bridge) throw new Error('Missing E2E bridge');
+    for (const change of changes) {
+      if (change.pressed) bridge.input.press(change.button, change.pointerId);
+      else bridge.input.release(change.button, change.pointerId);
+    }
+  }, changes);
+}
+
+async function setJoystick(page: Page, x: number, y: number) {
+  await page.evaluate(({ x, y }) => {
+    const bridge = (window as VectorArcadeDebugWindow).__VECTOR_ARCADE_DEBUG__;
+    if (!bridge) throw new Error('Missing E2E bridge');
+    bridge.input.joystick(x, y);
+  }, { x, y });
+}
+
+async function resetInput(page: Page) {
+  await page.evaluate(() => (window as VectorArcadeDebugWindow).__VECTOR_ARCADE_DEBUG__?.input.reset());
+}
+
+/**
+ * Keep one real PointerEvent smoke path so the browser-facing overlay remains
+ * covered. Events target the actual control element and derive their position
+ * from its live DOM rect instead of assuming a 1200x800 coordinate map.
+ */
+async function pointerOnControl(
+  page: Page,
+  type: 'pointerdown' | 'pointerup',
+  control: ButtonName,
+  pointerId: number,
+) {
+  await page.locator(`[data-control="${control}"]`).evaluate(
+    (element, { type, pointerId }) => {
+      const rect = element.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      element.dispatchEvent(new PointerEvent(type, {
         bubbles: true,
         cancelable: true,
         clientX: x,
@@ -27,9 +88,13 @@ async function pointer(page: Page, type: 'pointerdown' | 'pointermove' | 'pointe
         buttons: type === 'pointerup' ? 0 : 1,
       }));
     },
-    { type, pointerId, x, y },
+    { type, pointerId },
   );
 }
+
+test.afterEach(async ({ page }) => {
+  if (!page.isClosed()) await resetInput(page).catch(() => undefined);
+});
 
 test.describe('Vector Arcade shell and GPU integration', () => {
   test('boots Pixi/WebGL into the top-level program menu', async ({ page }) => {
@@ -37,9 +102,7 @@ test.describe('Vector Arcade shell and GPU integration', () => {
     page.on('pageerror', (error) => pageErrors.push(error));
     await waitForArcade(page);
 
-    const first = await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot());
-    await page.waitForTimeout(120);
-    const second = await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot());
+    const first = await snapshot(page);
     const hasWebGL = await page.locator('canvas.game-canvas').evaluate((element) => {
       const canvas = element as HTMLCanvasElement;
       return Boolean(canvas.getContext('webgl2') ?? canvas.getContext('webgl'));
@@ -47,7 +110,8 @@ test.describe('Vector Arcade shell and GPU integration', () => {
 
     expect(hasWebGL).toBe(true);
     expect(first.mode).toBe('menu');
-    expect(second.frameCount).toBeGreaterThan(first.frameCount);
+    await expect.poll(async () => (await snapshot(page)).frameCount, { timeout: 15_000 })
+      .toBeGreaterThan(first.frameCount);
     await expect(page.locator('.arcade-menu')).toBeVisible();
     await expect(page.locator('.arcade-menu-item')).toHaveCount(3);
     await expect(page.locator('.arcade-menu-item[data-entry-id="asteroids"]')).toContainText('ASTEROIDS');
@@ -61,88 +125,96 @@ test.describe('Vector Arcade shell and GPU integration', () => {
     await page.locator('.arcade-menu-item[data-entry-id="configuration"]').click();
     await expect(page.locator('.settings-panel')).toBeVisible();
 
-    const before = await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot().frameCount);
     await page.locator('input[data-setting="controlOpacity"]').fill('0.55');
-    await page.waitForTimeout(100);
-    const after = await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot().frameCount);
-    expect(after).toBeGreaterThan(before);
+    await expect.poll(async () => (await snapshot(page)).settings.controlOpacity, { timeout: 15_000 }).toBe(0.55);
+    await expect(page.locator('output[data-value="controlOpacity"]')).toHaveText('0.55');
+
     await page.locator('.settings-close').click();
     await expect(page.locator('.arcade-menu')).toBeVisible();
   });
 
-  test('launches Asteroids from the menu and preserves simultaneous joystick+A touch', async ({ page }) => {
+  test('launches Asteroids and preserves simultaneous joystick+A state through the E2E bridge', async ({ page }) => {
     await launch(page, 'asteroids');
     await expect(page.locator('.touch-overlay')).toBeVisible();
 
-    await pointer(page, 'pointerdown', 1, 600, 400);
-    await pointer(page, 'pointermove', 1, 700, 400);
-    await pointer(page, 'pointerdown', 2, 1050, 600);
-    await page.waitForTimeout(50);
+    await setJoystick(page, 0.85, 0);
+    await setButton(page, 'a', true, 2002);
 
-    const active = await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot().input);
-    expect(active.joystick.x).toBeGreaterThan(0.6);
-    expect(Math.abs(active.joystick.y)).toBeLessThan(0.1);
-    expect(active.buttons.a).toBe(true);
+    await expect.poll(async () => {
+      const input = (await snapshot(page)).input;
+      return input.joystick.x > 0.8 && Math.abs(input.joystick.y) < 0.05 && input.buttons.a;
+    }, { timeout: 15_000 }).toBe(true);
 
-    await pointer(page, 'pointerup', 2, 1050, 600);
-    await pointer(page, 'pointerup', 1, 700, 400);
+    await setButton(page, 'a', false, 2002);
+    await setJoystick(page, 0, 0);
   });
 
   test('launches Tempest and advances the tube-shooter simulation', async ({ page }) => {
     await launch(page, 'tempest');
-    const before = await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot());
+    const before = await snapshot(page);
     expect(before.hud).toContain('TUBE VECTOR');
     expect((before.game as { laneCount: number }).laneCount).toBe(16);
+    const initialLane = (before.game as { playerLane: number }).playerLane;
 
-    await page.keyboard.down('ArrowRight');
-    await page.keyboard.down('Space');
-    await page.waitForTimeout(160);
-    await page.keyboard.up('Space');
-    await page.keyboard.up('ArrowRight');
+    await setJoystick(page, 1, 0);
+    await setButton(page, 'a', true, 3001);
 
-    const after = await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot());
-    expect((after.game as { playerLane: number }).playerLane).not.toBe((before.game as { playerLane: number }).playerLane);
-    expect((after.game as { bullets: unknown[] }).bullets.length).toBeGreaterThan(0);
+    await expect.poll(async () => {
+      const game = (await snapshot(page)).game as { playerLane: number; bullets: unknown[] };
+      return Math.abs(game.playerLane - initialLane) > 0.01 && game.bullets.length > 0;
+    }, { timeout: 15_000 }).toBe(true);
+
+    await setButton(page, 'a', false, 3001);
+    await setJoystick(page, 0, 0);
   });
 
-  test('supports simultaneous L/R strip input inside either game', async ({ page }) => {
+  test('maps simultaneous real PointerEvents from the L/R overlay strips', async ({ page }) => {
     await launch(page, 'tempest');
-    await pointer(page, 'pointerdown', 3, 120, 30);
-    await pointer(page, 'pointerdown', 4, 1080, 30);
-    await page.waitForTimeout(40);
+    await pointerOnControl(page, 'pointerdown', 'l', 4003);
+    await pointerOnControl(page, 'pointerdown', 'r', 4004);
 
-    const active = await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot().input.buttons);
-    expect(active.l).toBe(true);
-    expect(active.r).toBe(true);
+    await expect.poll(async () => {
+      const buttons = (await snapshot(page)).input.buttons;
+      return buttons.l && buttons.r;
+    }, { timeout: 15_000 }).toBe(true);
 
-    await pointer(page, 'pointerup', 3, 120, 30);
-    await pointer(page, 'pointerup', 4, 1080, 30);
+    await pointerOnControl(page, 'pointerup', 'l', 4003);
+    await pointerOnControl(page, 'pointerup', 'r', 4004);
+    await expect.poll(async () => {
+      const buttons = (await snapshot(page)).input.buttons;
+      return !buttons.l && !buttons.r;
+    }, { timeout: 15_000 }).toBe(true);
   });
 
   test('Select opens global settings from a game and Start pauses the active game', async ({ page }) => {
     await launch(page, 'asteroids');
 
-    await pointer(page, 'pointerdown', 5, 150, 775);
-    await page.waitForTimeout(40);
-    await pointer(page, 'pointerup', 5, 150, 775);
-    await expect(page.locator('.settings-panel')).toBeVisible();
+    await setButton(page, 'select', true, 5005);
+    await expect(page.locator('.settings-panel')).toBeVisible({ timeout: 15_000 });
+    await setButton(page, 'select', false, 5005);
     await page.locator('.settings-close').click();
+    await expect(page.locator('.settings-panel')).toBeHidden();
 
-    await pointer(page, 'pointerdown', 6, 1050, 775);
-    await page.waitForTimeout(40);
-    await pointer(page, 'pointerup', 6, 1050, 775);
-    await expect.poll(async () => (await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot().hud))).toContain('PAUSED');
+    await setButton(page, 'start', true, 5006);
+    await expect.poll(async () => Boolean(((await snapshot(page)).game as { paused: boolean }).paused), { timeout: 15_000 })
+      .toBe(true);
+    await setButton(page, 'start', false, 5006);
   });
 
-  test('Start+Select chord returns a running game to the arcade menu', async ({ page }) => {
+  test('Start+Select chord atomically returns a running game to the arcade menu', async ({ page }) => {
     await launch(page, 'tempest');
-    await pointer(page, 'pointerdown', 8, 150, 775);
-    await pointer(page, 'pointerdown', 9, 1050, 775);
-    await page.waitForTimeout(50);
-    await pointer(page, 'pointerup', 8, 150, 775);
-    await pointer(page, 'pointerup', 9, 1050, 775);
 
-    await expect.poll(async () => (await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot().mode))).toBe('menu');
+    await setButtonsAtomic(page, [
+      { button: 'select', pressed: true, pointerId: 6008 },
+      { button: 'start', pressed: true, pointerId: 6009 },
+    ]);
+
+    await expect.poll(async () => (await snapshot(page)).mode, { timeout: 15_000 }).toBe('menu');
+
+    await setButtonsAtomic(page, [
+      { button: 'select', pressed: false, pointerId: 6008 },
+      { button: 'start', pressed: false, pointerId: 6009 },
+    ]);
     await expect(page.locator('.arcade-menu')).toBeVisible();
     await expect(page.locator('.touch-overlay')).toBeHidden();
   });
@@ -150,13 +222,12 @@ test.describe('Vector Arcade shell and GPU integration', () => {
   test('desktop keyboard navigation can choose Tempest without touching the menu', async ({ page }) => {
     await waitForArcade(page);
     await page.keyboard.down('ArrowDown');
-    await page.waitForTimeout(40);
+    await expect.poll(async () => (await snapshot(page)).menu.selectedId, { timeout: 15_000 }).toBe('tempest');
     await page.keyboard.up('ArrowDown');
-    await page.waitForTimeout(30);
+
     await page.keyboard.down('Space');
-    await page.waitForTimeout(40);
+    await expect.poll(async () => (await snapshot(page)).activeGameId, { timeout: 15_000 }).toBe('tempest');
     await page.keyboard.up('Space');
-    await expect.poll(async () => (await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot().activeGameId))).toBe('tempest');
   });
 
   test('resizes the Pixi surface and active Tempest game on orientation change', async ({ page }) => {
@@ -164,8 +235,9 @@ test.describe('Vector Arcade shell and GPU integration', () => {
     await page.setViewportSize({ width: 800, height: 1200 });
 
     await expect.poll(async () => {
-      const snapshot = await page.evaluate(() => window.__VECTOR_ARCADE_DEBUG__!.snapshot());
-      return [Math.round(snapshot.screen.width), Math.round(snapshot.screen.height), (snapshot.game as { width: number; height: number }).width, (snapshot.game as { width: number; height: number }).height];
-    }).toEqual([800, 1200, 800, 1200]);
+      const current = await snapshot(page);
+      const game = current.game as { width: number; height: number };
+      return [Math.round(current.screen.width), Math.round(current.screen.height), game.width, game.height];
+    }, { timeout: 15_000 }).toEqual([800, 1200, 800, 1200]);
   });
 });

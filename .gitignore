@@ -1,9 +1,13 @@
 node_modules/
 dist/
-.cache/
+.cache/*
+!.cache/gradle/
+.cache/gradle/*
+!.cache/gradle/.gitkeep
 coverage/
 playwright-report/
 test-results/
-out/*.apk
+out/*
+!out/.gitkeep
 *.log
 .DS_Store

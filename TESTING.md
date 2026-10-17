@@ -48,7 +48,7 @@ fails, Gradle is not invoked and no APK is emitted.
   diffusion calculations, and parameter bounds.
 - **Graphics settings**: defaults stay within supported UI ranges.
 
-At v0.4 there are **57 unit tests**.
+At v0.4.4 there are **58 unit tests**.
 
 ### Chromium/Pixi integration suite
 
@@ -96,3 +96,81 @@ Playwright keeps useful diagnostics on failure:
 
 These artifacts are especially useful when an AI coding agent changes renderer,
 input, or shell/navigation behavior.
+
+## Headed Chromium under Xvfb (Docker / WSL)
+
+The container CI path runs Playwright in **headed Chromium** inside an Xvfb virtual X11 display. This is intentional: the Pixi/WebGL integration tests depend on animation frames and multitouch event consumption, and headed mode provides browser scheduling closer to the Android/runtime behavior than Chromium's headless path on software WebGL.
+
+Canonical commands:
+
+```bash
+docker compose run --rm test
+```
+
+or, for only the browser suite after dependencies/build are ready:
+
+```bash
+docker compose run --rm test bash -lc 'npm run build:web && npm run test:e2e'
+```
+
+`npm run test:e2e` invokes `scripts/test-e2e.sh`, which uses `xvfb-run` with a 1280x960x24 virtual display and launches Playwright with `--headed`. `npm run test:e2e:plain` remains available for an ordinary Playwright headless run when debugging differences between modes.
+
+
+## Image-baked dependencies
+
+The test container does not install npm packages at startup. Dependencies are
+baked into the Docker image. After changing source, rebuild the image before
+running the immutable test service:
+
+```bash
+docker compose build
+docker compose run --rm test
+```
+
+After changing `package.json` or `package-lock.json`, the same `docker compose
+build` command automatically invalidates and rebuilds the dependency layer. See
+`CACHING.md` for force-refresh and cleanup commands.
+
+
+## Deterministic browser input harness (v0.4.4)
+
+Playwright loads the app with `?e2e=1`. Only in that mode, `main.ts` exposes a
+small `window.__VECTOR_ARCADE_DEBUG__.input` bridge that drives the existing
+`TouchController` state machine directly. This avoids relying on synthetic
+multi-pointer scheduling to test game/shell chords under Xvfb + SwiftShader.
+
+The browser suite deliberately splits responsibilities:
+
+- **Real DOM PointerEvent smoke coverage:** L/R are pressed through the actual
+  overlay elements, using their live DOM rectangles (no hard-coded pixels).
+- **Deterministic game/shell input:** joystick, A, Start, Select, and the
+  Start+Select chord use the E2E bridge and are consumed by the normal Pixi
+  ticker/game loop.
+- **No fixed frame sleeps:** state changes use `expect.poll(...)` with bounded
+  timeouts. A genuinely stalled renderer still fails, but slow software WebGL
+  does not create false negatives.
+- **Atomic chords:** Start and Select are injected in one browser task so a
+  ticker frame cannot observe only half the chord.
+
+The bridge is not installed during normal browser or Android operation; it is
+created only when the URL contains `?e2e=1`.
+
+The Start+Select E2E case also guards a shell-level regression: returning to
+the menu primes `MenuController` with the currently-held chord so Start cannot
+be interpreted as a fresh menu-confirm before the user releases it.
+
+
+### Browser failure artifacts
+
+Playwright writes screenshots, videos, traces, and the HTML report under
+`out/test-results/` and `out/playwright-report/`. The Compose test/APK services
+already bind-mount `./out`, so these diagnostics survive `docker compose run
+--rm ...` and can be opened directly from WSL after a failed run.
+
+## Layout guard (v0.4.4.1)
+
+The CI entrypoint now rejects accidental nested project trees such as `src/src`
+or `src/tests`. Those paths usually mean a patch was applied while the current
+directory was `./src` instead of the project root. If this guard fires, remove
+only those accidental nested paths and re-apply the update from the directory
+that contains `package.json`, `compose.yaml`, `Dockerfile`, `src/`, and `tests/`.

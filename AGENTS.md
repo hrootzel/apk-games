@@ -56,3 +56,22 @@ Every new game needs deterministic tests for controls, movement/state evolution,
 collisions/scoring, lifecycle/reset behavior, export/import, and representative
 `VectorPath` generation. Every new shell/menu flow needs a pure unit-testable
 state model where practical plus at least one Playwright end-to-end path.
+
+## Container dependency model (v0.4.4)
+
+Do not add runtime `npm install` / `npm ci` calls to build or test scripts.
+Dependencies are baked into the image at `/opt/vector-arcade-deps`; after package
+metadata changes, rebuild with `docker compose build`. Immutable `test`, `web`,
+and `apk` services use the source snapshot baked into the image. Interactive
+`dev` and `shell` services bind-mount the checkout but resolve packages from the
+image. See `CACHING.md` before changing this model.
+
+## E2E input policy
+
+Browser integration tests load `/?e2e=1` and may use the deterministic
+`window.__VECTOR_ARCADE_DEBUG__.input` bridge for controller/game state. Do not
+replace this with fixed-duration synthetic pointer pulses. Keep at least one
+real DOM PointerEvent smoke test against the visible touch overlay so browser
+event wiring remains covered. Multi-button chords must be injected atomically
+in one page task and assertions should wait on observable state with bounded
+`expect.poll(...)` timeouts rather than `waitForTimeout(...)`.

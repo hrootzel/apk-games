@@ -1,6 +1,6 @@
 import { Application, Text } from 'pixi.js';
 import type { ArcadeGame } from '../game/ArcadeGame';
-import type { InputSnapshot, VectorPath } from '../game/types';
+import type { ButtonName, InputSnapshot, VectorPath } from '../game/types';
 import { VectorRenderer } from '../graphics/VectorRenderer';
 import { defaultGraphicsSettings } from '../graphics/settings';
 import { TouchController } from '../input/TouchController';
@@ -8,6 +8,7 @@ import { ArcadeMenuView } from '../ui/ArcadeMenuView';
 import { SettingsPanel } from '../ui/SettingsPanel';
 import { GAME_REGISTRY, findGame } from './gameRegistry';
 import { MenuController, type MenuEntry, type MenuSelection } from './MenuController';
+import type { ArcadeDebugSnapshot } from './debugTypes';
 
 export type ArcadeMode = 'menu' | 'game';
 
@@ -104,7 +105,7 @@ export class GameApp {
         this.hud.text = 'VECTOR ARCADE  //  FULL-COLOR PHOSPHOR SYSTEM';
       } else if (this.activeGame) {
         if (this.shellChordPressed(input)) {
-          this.showMenu();
+          this.showMenu(input);
         } else {
           this.activeGame.update(dtMs, input);
           this.vectorRenderer.render(this.activeGame.getVectorPaths(input), elapsedMs);
@@ -117,15 +118,17 @@ export class GameApp {
     });
   }
 
-  getDebugSnapshot() {
+  getDebugSnapshot(): ArcadeDebugSnapshot {
     return {
       frameCount: this.frameCount,
       mode: this.mode,
       activeGameId: this.activeGameId,
-      input: this.lastInput ?? this.touch.snapshot(),
+      input: this.touch.snapshot(),
+      consumedInput: this.lastInput,
       game: this.activeGame?.exportState() ?? null,
       menu: this.menuController.getState(),
       settingsVisible: this.settingsPanel.isVisible(),
+      settings: { ...this.settings },
       hud: this.hud.text,
       renderer: this.pixi.renderer.constructor.name,
       screen: {
@@ -134,6 +137,21 @@ export class GameApp {
         resolution: this.pixi.renderer.resolution,
       },
     };
+  }
+
+  /** Test-only controller injection. Exposed to the browser only with ?e2e=1. */
+  debugSetButton(button: ButtonName, pressed: boolean, pointerId = 9000): void {
+    this.touch.debugSetButton(button, pressed, pointerId);
+  }
+
+  /** Test-only analog joystick injection. Exposed to the browser only with ?e2e=1. */
+  debugSetJoystick(x: number, y: number): void {
+    this.touch.debugSetJoystick(x, y);
+  }
+
+  /** Clear all injected/held controller state between E2E assertions. */
+  debugResetInput(): void {
+    this.touch.debugResetInput();
   }
 
   private activateMenuSelection(selection: MenuSelection): void {
@@ -158,7 +176,7 @@ export class GameApp {
     this.activeGame.resize(this.pixi.screen.width, this.pixi.screen.height);
   }
 
-  private showMenu(): void {
+  private showMenu(heldInput?: InputSnapshot): void {
     this.mode = 'menu';
     this.activeGame = null;
     this.activeGameId = null;
@@ -167,7 +185,8 @@ export class GameApp {
     // The menu is directly touchable; hiding the gameplay overlay prevents the
     // quadrant labels from competing visually with the program list.
     this.touch.setVisible(false);
-    this.menuController.resetInputEdges();
+    if (heldInput) this.menuController.primeInputEdges(heldInput);
+    else this.menuController.resetInputEdges();
     this.shellLastInput = null;
   }
 

@@ -77,14 +77,13 @@ Open <http://localhost:5173>.
 ## Full automated test / CI gate
 
 ```bash
-docker compose build
-docker compose run --rm test
+docker compose run --rm --build test
 ```
 
 The container runs:
 
 1. strict TypeScript checking;
-2. **57 deterministic unit tests** with V8 coverage enforcement;
+2. **58 deterministic unit tests** with V8 coverage enforcement;
 3. optimized Vite production compilation;
 4. **9 Playwright Chromium/Pixi/WebGL integration tests**.
 
@@ -98,13 +97,12 @@ See [`TESTING.md`](TESTING.md) for the detailed matrix and thresholds.
 docker compose run --rm web
 ```
 
-Output: `dist/`.
+Output: `out/web/`.
 
 ## Android debug APK
 
 ```bash
-docker compose build
-docker compose run --rm apk
+docker compose run --rm --build apk
 ```
 
 `apk` is a hard quality gate: the complete test suite and production browser build run before Capacitor/Gradle. A failing test prevents APK generation.
@@ -121,7 +119,7 @@ Install from the host with:
 adb install -r out/vector-arcade-debug.apk
 ```
 
-The first dependency install creates `package-lock.json` if one is not already present; commit it after the first successful online build to pin the npm dependency graph.
+A committed `package-lock.json` is strongly recommended. When it is present, the image dependency layer uses `npm ci`; otherwise it falls back to `npm install`. If your existing WSL checkout already produced a lockfile, keep/commit it before rebuilding the v0.4.4 image.
 
 ## Interactive toolchain / Dev Container
 
@@ -129,15 +127,16 @@ The first dependency install creates `package-lock.json` if one is not already p
 docker compose run --rm shell
 ```
 
-Inside:
+Inside, dependencies are already supplied by the image:
 
 ```bash
-./scripts/install-deps.sh
 npm run typecheck
 npm run test:coverage
 npm run build:web
 npm run test:e2e
 ```
+
+Do not run `npm install` in `/workspace` unless you intentionally want a host-side `node_modules` tree. After changing package metadata, exit the shell and run `docker compose build`.
 
 VS Code can also open `.devcontainer/devcontainer.json`, which uses the same image.
 
@@ -146,3 +145,37 @@ The Docker image contains Node 22, JDK 17, Android SDK/API 36 tooling, and the C
 ## Target hardware
 
 Primary target: **Samsung Galaxy Tab S9+ 5G (SM-X818U)**. Controls and projection geometry are normalized and responsive so the same app can run on other Android tablets and in browser windows of different aspect ratios. Pixi internal resolution remains capped to control the cost of the double phosphor framebuffer and blur/filter passes.
+
+### WSL / Docker browser tests
+
+The CI/APK gate runs Playwright with a **headed Chromium under Xvfb**, not Chromium headless. This keeps the build self-contained while giving Pixi/WebGL and touch-edge tests normal visible-browser animation scheduling. Run `docker compose run --rm test`; use `npm run test:e2e:plain` only when you specifically want to compare against headless Chromium.
+
+## v0.4.4 image-baked dependency cache
+
+JavaScript dependencies now live in `/opt/vector-arcade-deps` inside the Docker
+image. `docker compose run --rm test`, `web`, and `apk` do not run npm dependency
+installation at container startup.
+
+After ordinary source changes, rebuild the source snapshot and then run the task:
+
+```bash
+docker compose run --rm --build apk
+```
+
+The expensive npm layer remains cached unless `package.json` or
+`package-lock.json` changed. `dev` and `shell` still use the live WSL checkout
+while resolving packages from the image.
+
+See `CACHING.md` for dependency refresh, BuildKit cleanup, Gradle-cache cleanup,
+and full-reset procedures.
+
+
+### E2E reliability under WSL/Xvfb
+
+Version 0.4.4 replaces fixed-duration synthetic multi-touch pulses with a
+deterministic E2E controller bridge available only under `?e2e=1`. One browser
+test still exercises real PointerEvents through the visible L/R strips. The
+remaining controller/chord tests drive the same TouchController snapshot path
+and wait for observable game/shell state transitions. This makes the headed
+Xvfb suite independent of SwiftShader frame timing while retaining a real
+Pixi/WebGL browser run.

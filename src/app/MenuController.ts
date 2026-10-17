@@ -28,8 +28,7 @@ export class MenuController {
   }
 
   update(input: InputSnapshot): MenuSelection | null {
-    const vertical = input.joystick.y;
-    const direction = vertical <= -0.45 ? -1 : vertical >= 0.45 ? 1 : 0;
+    const direction = this.inputDirection(input);
 
     if (direction !== 0 && this.lastVertical === 0) this.move(direction);
     this.lastVertical = direction;
@@ -70,6 +69,16 @@ export class MenuController {
     this.lastConfirm = false;
   }
 
+  /**
+   * Seed edge detectors from an already-held controller state. This is used
+   * when returning to the menu via Start+Select so the still-held Start button
+   * is not misread as a fresh menu-confirm on the next frame.
+   */
+  primeInputEdges(input: InputSnapshot): void {
+    this.lastVertical = this.inputDirection(input);
+    this.lastConfirm = input.buttons.a || input.buttons.start;
+  }
+
   getState() {
     return {
       selectedIndex: this.selectedIndex,
@@ -78,6 +87,11 @@ export class MenuController {
       visibleRows: this.visibleRows,
       visibleEntries: this.entries.slice(this.scrollOffset, this.scrollOffset + this.visibleRows),
     };
+  }
+
+  private inputDirection(input: InputSnapshot): number {
+    const vertical = input.joystick.y;
+    return vertical <= -0.45 ? -1 : vertical >= 0.45 ? 1 : 0;
   }
 
   private ensureVisible(): void {

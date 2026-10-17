@@ -73,6 +73,25 @@ describe('MenuController', () => {
     expect(menu.getState().selectedIndex).toBe(0);
   });
 
+
+  it('can prime held edges so a Start+Select return does not immediately confirm the menu', () => {
+    const menu = new MenuController(entries(3));
+    const heldChord = input({ start: true, select: true });
+
+    menu.primeInputEdges(heldChord);
+    expect(menu.update(heldChord)).toBeNull();
+    expect(menu.getState().selectedIndex).toBe(0);
+
+    // A held navigation direction is suppressed too until it returns neutral.
+    const heldDown = input({ start: false, select: false }, { x: 0, y: 1 });
+    menu.primeInputEdges(heldDown);
+    expect(menu.update(heldDown)).toBeNull();
+    expect(menu.getState().selectedIndex).toBe(0);
+
+    menu.update(input());
+    expect(menu.update(input({ start: true }))).toEqual({ id: 'game-0', kind: 'game' });
+  });
+
   it('clamps externally requested selected indices', () => {
     const menu = new MenuController(entries(3));
     menu.setSelectedIndex(99);

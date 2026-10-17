@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 cd /workspace
 
 # Hard quality gate: typecheck, unit coverage, production web build, and
@@ -9,10 +8,10 @@ cd /workspace
 
 if [[ ! -d android ]]; then
   echo "[android] Creating Capacitor Android project..."
-  npx cap add android
+  cap add android
 fi
 
-npx cap sync android
+cap sync android
 chmod +x android/gradlew
 mkdir -p out .cache/gradle
 

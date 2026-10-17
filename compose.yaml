@@ -1,42 +1,57 @@
-x-toolchain: &toolchain
+x-image: &image
+  image: vector-arcade-local:0.4.4
   build:
     context: .
   working_dir: /workspace
   user: node
-  volumes:
-    - .:/workspace
   environment:
-    npm_config_cache: /workspace/.cache/npm
-    GRADLE_USER_HOME: /workspace/.cache/gradle
     PLAYWRIGHT_BROWSERS_PATH: /ms-playwright
+    GRADLE_USER_HOME: /workspace/.cache/gradle
 
 services:
+  # Interactive services use the live WSL checkout, but dependencies still come
+  # from /opt/vector-arcade-deps in the image. No node_modules volume is needed.
   shell:
-    <<: *toolchain
+    <<: *image
     init: true
     ipc: host
     stdin_open: true
     tty: true
-    command: bash
+    volumes:
+      - .:/workspace
+    command: ./scripts/shell.sh
 
   dev:
-    <<: *toolchain
+    <<: *image
     ports:
       - "5173:5173"
+    volumes:
+      - .:/workspace
     command: ./scripts/dev.sh
 
-  web:
-    <<: *toolchain
-    command: ./scripts/build-web.sh
-
+  # CI/build services intentionally use the source snapshot baked into the
+  # image. After source edits, run `docker compose build` before these commands.
   test:
-    <<: *toolchain
+    <<: *image
     init: true
     ipc: host
+    volumes:
+      - ./out:/workspace/out
     command: ./scripts/test.sh
 
+  web:
+    <<: *image
+    volumes:
+      - ./out:/workspace/out
+    command: ./scripts/build-web.sh
+
   apk:
-    <<: *toolchain
+    <<: *image
     init: true
     ipc: host
+    volumes:
+      - ./out:/workspace/out
+      # Gradle's cache is intentionally visible and easy to delete; unlike
+      # node_modules it is not hidden in a Docker named volume.
+      - ./.cache/gradle:/workspace/.cache/gradle
     command: ./scripts/build-apk.sh
