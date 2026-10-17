@@ -79,8 +79,8 @@ async function resetInput(page: Page) {
  */
 async function pointerOnControl(
   page: Page,
-  type: 'pointerdown' | 'pointerup',
-  control: ButtonName,
+  type: 'pointerdown' | 'pointerup' | 'pointercancel',
+  control: ButtonName | 'fire-thrust',
   pointerId: number,
 ) {
   await page.locator(`[data-control="${control}"]`).evaluate(
@@ -180,7 +180,7 @@ test.describe('Vector Arcade shell and GPU integration', () => {
     await setJoystick(page, 0, 0);
   });
 
-  test('maps simultaneous real PointerEvents from the L/R overlay strips', async ({ page }) => {
+  test('maps simultaneous real PointerEvents from the lower-left steering buttons', async ({ page }) => {
     await launch(page, 'tempest');
     await pointerOnControl(page, 'pointerdown', 'l', 4003);
     await pointerOnControl(page, 'pointerdown', 'r', 4004);
@@ -196,6 +196,109 @@ test.describe('Vector Arcade shell and GPU integration', () => {
       const buttons = (await snapshot(page)).input.buttons;
       return !buttons.l && !buttons.r;
     }, { timeout: 15_000 }).toBe(true);
+  });
+
+  test('Asteroids supports steering and combined fire/thrust with independent pointer release', async ({ page }) => {
+    await launch(page, 'asteroids');
+    await expect(page.locator('.joystick-shell')).toHaveCount(0);
+    await expect(page.locator('[data-control="b"]')).toHaveText('THRUST');
+    const before = (await snapshot(page)).game as { ship: { angle: number } };
+    await pointerOnControl(page, 'pointerdown', 'r', 71);
+    await pointerOnControl(page, 'pointerdown', 'fire-thrust', 72);
+    await pointerOnControl(page, 'pointerdown', 'a', 73);
+    await expect.poll(async () => {
+      const current = await snapshot(page);
+      const game = current.game as { ship: { angle: number }; bullets: unknown[] };
+      return current.input.buttons.r && current.input.buttons.a && current.input.buttons.b
+        && game.ship.angle !== before.ship.angle && game.bullets.length > 0;
+    }, { timeout: 15_000 }).toBe(true);
+    await pointerOnControl(page, 'pointercancel', 'fire-thrust', 72);
+    expect((await snapshot(page)).input.buttons).toMatchObject({ a: true, b: false, r: true });
+    await pointerOnControl(page, 'pointerup', 'a', 73);
+    await pointerOnControl(page, 'pointerup', 'r', 71);
+    expect((await snapshot(page)).input.buttons).toMatchObject({ a: false, b: false, r: false });
+  });
+
+  test('center touches are neutral and focus loss releases held touch controls', async ({ page }) => {
+    await launch(page, 'asteroids');
+    await page.locator('canvas.game-canvas').evaluate((canvas) => {
+      const rect = canvas.getBoundingClientRect();
+      canvas.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true, pointerId: 80, clientX: rect.width / 2, clientY: rect.height / 2,
+      }));
+    });
+    expect(Object.values((await snapshot(page)).input.buttons).some(Boolean)).toBe(false);
+    await pointerOnControl(page, 'pointerdown', 'fire-thrust', 81);
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    expect(Object.values((await snapshot(page)).input.buttons).some(Boolean)).toBe(false);
+  });
+
+  test('Tempest drag steering is configurable, horizontal, and releases on cancellation', async ({ page }) => {
+    await launch(page, 'tempest');
+    await setButton(page, 'select', true);
+    await expect(page.locator('.settings-panel')).toBeVisible();
+    await setButton(page, 'select', false);
+    await page.locator('input[data-setting="dragSteering"]').check();
+    await page.locator('input[data-setting="controlSize"]').fill('90');
+    await page.locator('input[data-setting="controlInset"]').fill('30');
+    await page.locator('.settings-close').click();
+    await expect(page.locator('[data-control="l"]')).toBeHidden();
+    await expect(page.locator('.steering-strip')).toBeVisible();
+    await expect(page.locator('[data-control="b"]')).toHaveText('SUPERZAP');
+    await page.locator('.steering-strip').evaluate((strip) => {
+      const rect = strip.getBoundingClientRect();
+      const common = { bubbles: true, cancelable: true, pointerId: 91, pointerType: 'touch' };
+      strip.dispatchEvent(new PointerEvent('pointerdown', { ...common, clientX: rect.left + rect.width / 2, clientY: rect.top + 20 }));
+      strip.dispatchEvent(new PointerEvent('pointermove', { ...common, clientX: rect.right, clientY: rect.top + 40 }));
+    });
+    await pointerOnControl(page, 'pointerdown', 'a', 92);
+    await expect.poll(async () => {
+      const input = (await snapshot(page)).input;
+      return input.joystick.x === 1 && input.joystick.y === 0 && input.buttons.a;
+    }, { timeout: 15_000 }).toBe(true);
+    await page.locator('.steering-strip').dispatchEvent('pointercancel', { pointerId: 91 });
+    expect((await snapshot(page)).input.joystick).toEqual({ x: 0, y: 0 });
+    expect((await snapshot(page)).input.buttons.a).toBe(true);
+    await pointerOnControl(page, 'pointerup', 'a', 92);
+    const current = await snapshot(page);
+    expect(current.settings.controlSize).toBe(90);
+    expect(current.settings.controlInset).toBe(30);
+    // Returning to the shell clears any held pointers; the next profile supplies its own controls.
+    await pointerOnControl(page, 'pointerdown', 'a', 93);
+    await page.keyboard.press('Escape');
+    expect((await snapshot(page)).input.buttons.a).toBe(false);
+    await page.locator('.arcade-menu-item[data-entry-id="asteroids"]').click();
+    await expect(page.locator('.steering-strip')).toHaveCount(0);
+    await expect(page.locator('[data-control="b"]')).toHaveText('THRUST');
+    await setButton(page, 'select', true);
+    await expect(page.locator('.settings-panel')).toBeVisible();
+    await setButton(page, 'select', false);
+    await page.locator('input[data-setting="combinedFireThrust"]').uncheck();
+    await page.locator('.settings-close').click();
+    await expect(page.locator('[data-control="fire-thrust"]')).toBeHidden();
+    await expect(page.locator('[data-control="a"]')).toBeVisible();
+    await expect(page.locator('[data-control="b"]')).toBeVisible();
+  });
+
+  test('touch controls remain reachable without overlapping in tablet orientations', async ({ page }) => {
+    await launch(page, 'asteroids');
+    for (const viewport of [{ width: 1200, height: 800 }, { width: 800, height: 1200 }]) {
+      await page.setViewportSize(viewport);
+      const bounds = await page.locator('.touch-button:visible').evaluateAll((buttons) => buttons.map((button) => {
+        const rect = button.getBoundingClientRect();
+        return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+      }));
+      for (const [index, rect] of bounds.entries()) {
+        expect(rect.left).toBeGreaterThanOrEqual(0);
+        expect(rect.right).toBeLessThanOrEqual(viewport.width);
+        expect(rect.top).toBeGreaterThanOrEqual(0);
+        expect(rect.bottom).toBeLessThanOrEqual(viewport.height);
+        for (const other of bounds.slice(index + 1)) {
+          expect(rect.right <= other.left || rect.left >= other.right || rect.bottom <= other.top || rect.top >= other.bottom).toBe(true);
+        }
+      }
+      await page.screenshot({ path: `out/controls-${viewport.width}x${viewport.height}.png` });
+    }
   });
 
   test('Select opens global settings from a game and Start pauses the active game', async ({ page }) => {

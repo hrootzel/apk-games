@@ -63,89 +63,57 @@ body {
 }
 
 .touch-overlay {
-  --control-opacity: 0.28;
+  --control-opacity: 0.55;
+  --control-size: 76px;
+  --control-inset: 16px;
+  --button-size: min(var(--control-size), 17vw, 16vh);
   position: absolute;
   inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   z-index: 10;
   pointer-events: none;
-  color: rgba(120, 244, 255, var(--control-opacity));
 }
 
-.zone {
+.control-group {
   position: absolute;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-color: rgba(120, 244, 255, calc(var(--control-opacity) * 0.6));
-  color: rgba(150, 248, 255, var(--control-opacity));
-  text-shadow: 0 0 12px rgba(60, 220, 255, calc(var(--control-opacity) * 0.8));
-  font-size: clamp(16px, 2vw, 30px);
-  letter-spacing: 0.2em;
-  transition: background-color 60ms linear, color 60ms linear;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, var(--button-size));
+  bottom: var(--control-inset);
 }
-
-.zone.active {
-  color: rgba(255, 255, 255, 0.9);
-  background: rgba(90, 235, 255, 0.10);
+.controls-left { left: var(--control-inset); }
+.controls-right { right: var(--control-inset); }
+.controls-system {
+  top: max(48px, var(--control-inset));
+  bottom: auto;
+  right: var(--control-inset);
+  grid-template-columns: repeat(2, auto);
 }
-
-.zone.strip.top {
-  top: 0;
-  height: 10.5%;
-  border-bottom: 1px solid;
+.touch-button, .steering-strip {
+  pointer-events: auto;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  color: rgba(190, 252, 255, var(--control-opacity));
+  background: rgba(2, 18, 24, 0.5);
+  border: 1px solid rgba(120, 244, 255, var(--control-opacity));
+  border-radius: 14px;
+  font: 600 clamp(9px, 1.3vw, 13px) ui-monospace, monospace;
+  min-width: 0;
+  padding: 6px;
+  min-height: calc(var(--button-size) * 0.65);
 }
-
-.zone.strip.bottom {
-  bottom: 0;
-  height: 10.5%;
-  border-top: 1px solid;
-  font-size: clamp(10px, 1.2vw, 18px);
-}
-
-.zone.left { left: 0; width: 50%; }
-.zone.right { right: 0; width: 50%; }
-
-.zone.face {
-  height: 39.5%;
-  width: 50%;
-  font-size: clamp(26px, 4.5vw, 68px);
-}
-
-.zone.face.upper { top: 10.5%; }
-.zone.face.lower { bottom: 10.5%; }
-.zone.face.left { border-right: 1px solid rgba(120, 244, 255, calc(var(--control-opacity) * 0.22)); }
-.zone.face.upper { border-bottom: 1px solid rgba(120, 244, 255, calc(var(--control-opacity) * 0.22)); }
-
-.joystick-shell {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: min(38vw, 38vh);
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-}
-
-.joystick-ring {
-  position: absolute;
-  inset: 2%;
-  border: 1px solid rgba(120, 244, 255, calc(var(--control-opacity) * 0.85));
-  border-radius: 50%;
-  box-shadow: inset 0 0 22px rgba(80, 235, 255, calc(var(--control-opacity) * 0.18)), 0 0 18px rgba(80, 235, 255, calc(var(--control-opacity) * 0.15));
-}
-
-.joystick-knob {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  width: 28%;
-  aspect-ratio: 1;
-  transform: translate(-50%, -50%);
-  border: 1px solid rgba(210, 255, 255, calc(var(--control-opacity) * 0.95));
-  border-radius: 50%;
-  background: rgba(80, 235, 255, calc(var(--control-opacity) * 0.08));
-  box-shadow: 0 0 16px rgba(100, 245, 255, calc(var(--control-opacity) * 0.4));
-}
+.touch-button.primary { min-height: var(--button-size); border-width: 2px; }
+.touch-button.active { color: white; background: rgba(50, 180, 210, 0.45); }
+.touch-button[data-control="l"] { grid-column: 1; grid-row: 2; font-size: 26px; }
+.touch-button[data-control="r"] { grid-column: 2; grid-row: 2; font-size: 26px; }
+.touch-button[data-control="y"] { grid-column: 1 / -1; grid-row: 1; }
+.touch-button[data-control="x"] { grid-column: 1 / -1; }
+.touch-button[data-control="fire-thrust"] { display: none; grid-column: 1 / -1; }
+.use-combined .touch-button[data-control="fire-thrust"] { display: block; }
+.controls-system .touch-button { min-height: 44px; font-size: 10px; }
+.steering-strip { display: none; grid-column: 1 / -1; grid-row: 2; align-items: center; justify-content: center; height: var(--button-size); }
+.use-drag .steering-strip { display: flex; }
+.use-drag .touch-button[data-control="l"], .use-drag .touch-button[data-control="r"] { display: none; }
 
 .settings-panel {
   position: absolute;
@@ -195,6 +163,7 @@ body {
 }
 
 .settings-row input { width: 100%; }
+.settings-row input[type="checkbox"] { width: 24px; height: 24px; justify-self: end; }
 .settings-row output { text-align: right; color: #eafff8; }
 .settings-help { margin-top: 14px; line-height: 1.55; color: rgba(190, 255, 235, 0.66); font-size: 11px; }
 

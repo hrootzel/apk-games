@@ -15,5 +15,11 @@ describe('default graphics settings', () => {
     expect(defaultGraphicsSettings.colorSeparation).toBeLessThanOrEqual(1);
     expect(defaultGraphicsSettings.controlOpacity).toBeGreaterThanOrEqual(0.05);
     expect(defaultGraphicsSettings.controlOpacity).toBeLessThanOrEqual(0.7);
+    expect(defaultGraphicsSettings.controlSize).toBeGreaterThanOrEqual(56);
+    expect(defaultGraphicsSettings.controlSize).toBeLessThanOrEqual(100);
+    expect(defaultGraphicsSettings.controlInset).toBeGreaterThanOrEqual(8);
+    expect(defaultGraphicsSettings.controlInset).toBeLessThanOrEqual(48);
+    expect(defaultGraphicsSettings.dragSteering).toBe(0);
+    expect(defaultGraphicsSettings.combinedFireThrust).toBe(1);
   });
 });

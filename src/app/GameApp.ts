@@ -170,6 +170,8 @@ export class GameApp {
     this.mode = 'game';
     this.menuView.hide();
     this.settingsPanel.hide();
+    this.touch.setProfile(registration.touch);
+    this.applySettings();
     this.touch.setVisible(true);
     this.menuController.resetInputEdges();
     this.shellLastInput = null;
@@ -183,7 +185,7 @@ export class GameApp {
     this.settingsPanel.hide();
     this.menuView.show();
     // The menu is directly touchable; hiding the gameplay overlay prevents the
-    // quadrant labels from competing visually with the program list.
+    // controls from competing visually with the program list.
     this.touch.setVisible(false);
     if (heldInput) this.menuController.primeInputEdges(heldInput);
     else this.menuController.resetInputEdges();
@@ -198,6 +200,8 @@ export class GameApp {
   private applySettings(): void {
     this.vectorRenderer.refreshFilters();
     this.touch.setOverlayOpacity(this.settings.controlOpacity);
+    this.touch.configure(this.settings.controlSize, this.settings.controlInset,
+      Boolean(this.settings.dragSteering), Boolean(this.settings.combinedFireThrust));
     this.root.style.setProperty('--scanline-alpha', String(this.settings.scanlines));
     this.root.style.setProperty('--vignette-alpha', String(this.settings.vignette));
   }

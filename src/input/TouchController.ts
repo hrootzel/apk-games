@@ -1,12 +1,12 @@
 import type { ButtonName, InputSnapshot, Vec2 } from '../game/types';
-import { classifyTouchBinding, joystickVector, type TouchBinding } from './layout';
+import { dragSteering, type TouchProfile } from './layout';
 
 const BUTTONS: ButtonName[] = ['a', 'b', 'x', 'y', 'l', 'r', 'start', 'select'];
 
 interface PointerBinding {
-  binding: TouchBinding;
+  buttons: readonly ButtonName[];
+  drag: boolean;
   startX: number;
-  startY: number;
 }
 
 export class TouchController {
@@ -17,7 +17,8 @@ export class TouchController {
   private readonly keys = new Set<string>();
 
   private readonly overlay: HTMLDivElement;
-  private readonly joystickKnob: HTMLDivElement;
+  private visible = false;
+  private profile: TouchProfile = { controls: [] };
   private readonly labelByButton = new Map<ButtonName, HTMLElement>();
 
   constructor(private readonly root: HTMLElement) {
@@ -25,27 +26,7 @@ export class TouchController {
 
     this.overlay = document.createElement('div');
     this.overlay.className = 'touch-overlay';
-    this.overlay.innerHTML = `
-      <div class="zone strip top left" data-control="l">L</div>
-      <div class="zone strip top right" data-control="r">R</div>
-      <div class="zone face upper left" data-control="y">Y</div>
-      <div class="zone face upper right" data-control="x">X</div>
-      <div class="zone face lower left" data-control="b">B</div>
-      <div class="zone face lower right" data-control="a">A</div>
-      <div class="zone strip bottom left" data-control="select">SELECT</div>
-      <div class="zone strip bottom right" data-control="start">START</div>
-      <div class="joystick-shell"><div class="joystick-ring"></div><div class="joystick-knob"></div></div>
-    `;
     this.root.appendChild(this.overlay);
-
-    const knob = this.overlay.querySelector<HTMLDivElement>('.joystick-knob');
-    if (!knob) throw new Error('Joystick knob was not created');
-    this.joystickKnob = knob;
-
-    for (const button of BUTTONS) {
-      const label = this.overlay.querySelector<HTMLElement>(`[data-control="${button}"]`);
-      if (label) this.labelByButton.set(button, label);
-    }
 
     root.addEventListener('pointerdown', this.onPointerDown, { passive: false });
     root.addEventListener('pointermove', this.onPointerMove, { passive: false });
@@ -53,6 +34,51 @@ export class TouchController {
     root.addEventListener('pointercancel', this.onPointerUp, { passive: false });
     window.addEventListener('keydown', this.onKeyDown);
     window.addEventListener('keyup', this.onKeyUp);
+    window.addEventListener('blur', () => this.debugResetInput());
+    window.addEventListener('resize', () => this.debugResetInput());
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.debugResetInput();
+    });
+    root.addEventListener('lostpointercapture', this.onPointerUp);
+  }
+
+  setProfile(profile: TouchProfile): void {
+    this.debugResetInput();
+    this.profile = profile;
+    this.labelByButton.clear();
+    this.overlay.replaceChildren();
+    for (const side of ['left', 'right', 'system'] as const) {
+      const group = document.createElement('div');
+      group.className = `control-group controls-${side}`;
+      for (const control of profile.controls.filter((entry) => entry.side === side)) {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `touch-button${control.primary ? ' primary' : ''}`;
+        button.dataset.control = control.id;
+        button.textContent = control.label;
+        button.setAttribute('aria-label', control.id === 'l' ? 'Steer left' : control.id === 'r' ? 'Steer right' : control.label);
+        group.appendChild(button);
+        if (control.id !== 'fire-thrust') this.labelByButton.set(control.id, button);
+      }
+      this.overlay.appendChild(group);
+    }
+    if (profile.dragSteering) {
+      const strip = document.createElement('div');
+      strip.className = 'steering-strip';
+      strip.dataset.control = 'drag';
+      strip.textContent = 'DRAG ◀ STEER ▶';
+      this.overlay.querySelector('.controls-left')?.prepend(strip);
+    }
+  }
+
+  configure(size: number, inset: number, drag: boolean, combined: boolean): void {
+    const useDrag = drag && Boolean(this.profile.dragSteering);
+    if (this.overlay.classList.contains('use-drag') !== useDrag
+      || this.overlay.classList.contains('use-combined') !== combined) this.debugResetInput();
+    this.overlay.style.setProperty('--control-size', `${size}px`);
+    this.overlay.style.setProperty('--control-inset', `${inset}px`);
+    this.overlay.classList.toggle('use-drag', useDrag);
+    this.overlay.classList.toggle('use-combined', combined);
   }
 
   setOverlayOpacity(opacity: number): void {
@@ -60,9 +86,10 @@ export class TouchController {
   }
 
   setVisible(visible: boolean): void {
+    if (this.visible !== visible) this.debugResetInput();
+    this.visible = visible;
     this.overlay.classList.toggle('hidden', !visible);
   }
-
 
   /**
    * Test-only input injection used by the browser E2E bridge. Production input
@@ -83,12 +110,6 @@ export class TouchController {
     const length = Math.hypot(clampedX, clampedY);
     const scale = length > 1 ? 1 / length : 1;
     this.joystick = { x: clampedX * scale, y: clampedY * scale };
-
-    const rect = this.root.getBoundingClientRect();
-    const radius = Math.max(1, Math.min(rect.width, rect.height) * 0.155);
-    const px = this.joystick.x * radius;
-    const py = this.joystick.y * radius;
-    this.joystickKnob.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;
   }
 
   debugResetInput(): void {
@@ -100,7 +121,6 @@ export class TouchController {
       this.pressed.get(button)?.clear();
       this.updateButtonVisual(button);
     }
-    this.joystickKnob.style.transform = 'translate(-50%, -50%)';
   }
 
   snapshot(): InputSnapshot {
@@ -130,72 +150,57 @@ export class TouchController {
   }
 
   private onPointerDown = (event: PointerEvent): void => {
-    if ((event.target as HTMLElement | null)?.closest('[data-ui="true"]')) return;
+    if (this.pointerBindings.has(event.pointerId)) return;
+    if (!this.visible || (event.target as HTMLElement | null)?.closest('[data-ui="true"]')) return;
+    const element = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-control]');
+    if (!element || !this.overlay.contains(element)) return;
+    const drag = element.dataset.control === 'drag';
+    if (drag && this.joystickPointer !== null) return;
+    const control = this.profile.controls.find((entry) => entry.id === element.dataset.control);
+    if (!drag && !control) return;
     event.preventDefault();
     try {
       this.root.setPointerCapture?.(event.pointerId);
     } catch {
-      // Synthetic pointer events (used by browser tests) may not be capturable.
+      // Synthetic PointerEvents cannot always be captured.
     }
-
-    const binding = classifyTouchBinding(
-      event.clientX,
-      event.clientY,
-      this.root.getBoundingClientRect(),
-      this.joystickPointer === null,
-    );
     this.pointerBindings.set(event.pointerId, {
-      binding,
-      startX: event.clientX,
-      startY: event.clientY,
+      buttons: control?.buttons ?? [], drag, startX: event.clientX,
     });
-
-    if (binding === 'joystick') {
-      this.joystickPointer = event.pointerId;
-      this.updateJoystick(event.clientX, event.clientY);
-    } else {
-      this.pressed.get(binding)?.add(event.pointerId);
-      this.updateButtonVisual(binding);
+    if (drag) this.joystickPointer = event.pointerId;
+    for (const button of control?.buttons ?? []) {
+      this.pressed.get(button)?.add(event.pointerId);
+      this.updateButtonVisual(button);
     }
   };
 
   private onPointerMove = (event: PointerEvent): void => {
     const pointer = this.pointerBindings.get(event.pointerId);
-    if (!pointer || pointer.binding !== 'joystick') return;
+    if (!pointer?.drag) return;
     event.preventDefault();
-    this.updateJoystick(event.clientX, event.clientY);
+    const travel = this.overlay.querySelector('.steering-strip')!.getBoundingClientRect().width * 0.35;
+    this.joystick = { x: dragSteering(pointer.startX, event.clientX, travel), y: 0 };
   };
 
   private onPointerUp = (event: PointerEvent): void => {
     const pointer = this.pointerBindings.get(event.pointerId);
     if (!pointer) return;
-    event.preventDefault();
-
-    if (pointer.binding === 'joystick') {
-      if (this.joystickPointer === event.pointerId) {
-        this.joystickPointer = null;
-        this.joystick = { x: 0, y: 0 };
-        this.joystickKnob.style.transform = 'translate(-50%, -50%)';
-      }
-    } else {
-      this.pressed.get(pointer.binding)?.delete(event.pointerId);
-      this.updateButtonVisual(pointer.binding);
+    if (event.cancelable) event.preventDefault();
+    if (pointer.drag) {
+      this.joystickPointer = null;
+      this.joystick = { x: 0, y: 0 };
     }
-
+    for (const button of pointer.buttons) {
+      this.pressed.get(button)?.delete(event.pointerId);
+      this.updateButtonVisual(button);
+    }
     this.pointerBindings.delete(event.pointerId);
   };
 
-  private updateJoystick(clientX: number, clientY: number): void {
-    const rect = this.root.getBoundingClientRect();
-    this.joystick = joystickVector(clientX, clientY, rect);
-    const radius = Math.max(1, Math.min(rect.width, rect.height) * 0.155);
-    const px = this.joystick.x * radius;
-    const py = this.joystick.y * radius;
-    this.joystickKnob.style.transform = `translate(calc(-50% + ${px}px), calc(-50% + ${py}px))`;
-  }
-
   private updateButtonVisual(button: ButtonName): void {
     this.labelByButton.get(button)?.classList.toggle('active', (this.pressed.get(button)?.size ?? 0) > 0);
+    this.overlay.querySelector('[data-control="fire-thrust"]')?.classList.toggle('active',
+      (this.pressed.get('a')?.size ?? 0) > 0 && (this.pressed.get('b')?.size ?? 0) > 0);
   }
 
   private onKeyDown = (event: KeyboardEvent): void => {

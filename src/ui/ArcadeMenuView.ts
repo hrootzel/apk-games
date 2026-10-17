@@ -76,7 +76,7 @@ export class ArcadeMenuView {
     });
     const active = buttons[state.selectedIndex];
     active?.scrollIntoView({ block: 'nearest' });
-    this.status.textContent = `${state.selectedIndex + 1}/${this.controller.entries.length}  ·  TOUCH ENTRY OR JOYSTICK + A  ·  CONFIGURATION STORES GLOBAL DISPLAY OPTIONS`;
+    this.status.textContent = `${state.selectedIndex + 1}/${this.controller.entries.length}  ·  TOUCH ENTRY OR ARROWS + SPACE  ·  CONFIGURATION FOR DISPLAY & CONTROLS`;
   }
 
   private kindLabel(entry: MenuEntry): string {

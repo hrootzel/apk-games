@@ -1,47 +1,37 @@
 import { describe, expect, it } from 'vitest';
-import { classifyTouchBinding, joystickVector } from '../../src/input/layout';
+import { ASTEROIDS_TOUCH, TEMPEST_TOUCH, dragSteering } from '../../src/input/layout';
 
-const rect = { left: 100, top: 50, width: 1000, height: 600 };
-
-describe('touch region mapping', () => {
-  it('maps top strips to L and R', () => {
-    expect(classifyTouchBinding(200, 70, rect)).toBe('l');
-    expect(classifyTouchBinding(1000, 70, rect)).toBe('r');
+describe('game touch profiles', () => {
+  it('provides shared logical controls with game-specific action labels', () => {
+    for (const profile of [ASTEROIDS_TOUCH, TEMPEST_TOUCH]) {
+      expect(new Set(profile.controls.flatMap((control) => control.buttons)))
+        .toEqual(new Set(['l', 'r', 'a', 'b', 'x', 'y', 'start', 'select']));
+      expect(profile.controls.filter((control) => ['l', 'r'].includes(control.id))
+        .every((control) => control.side === 'left')).toBe(true);
+      expect(new Set(profile.controls.map((control) => control.id)).size).toBe(profile.controls.length);
+    }
+    expect(ASTEROIDS_TOUCH.controls.find((control) => control.id === 'b')?.label).toBe('THRUST');
+    expect(TEMPEST_TOUCH.controls.find((control) => control.id === 'b')?.label).toBe('SUPERZAP');
   });
 
-  it('maps bottom strips to Select and Start', () => {
-    expect(classifyTouchBinding(200, 630, rect)).toBe('select');
-    expect(classifyTouchBinding(1000, 630, rect)).toBe('start');
-  });
-
-  it('maps the four face quadrants to SNES-style Y/X/B/A', () => {
-    expect(classifyTouchBinding(250, 180, rect, false)).toBe('y');
-    expect(classifyTouchBinding(950, 180, rect, false)).toBe('x');
-    expect(classifyTouchBinding(250, 520, rect, false)).toBe('b');
-    expect(classifyTouchBinding(950, 520, rect, false)).toBe('a');
-  });
-
-  it('reserves the central region for the first joystick pointer', () => {
-    expect(classifyTouchBinding(600, 350, rect, true)).toBe('joystick');
-    expect(classifyTouchBinding(600, 350, rect, false)).toBe('a');
+  it('offers combined fire and thrust only for Asteroids and drag only for Tempest', () => {
+    expect(ASTEROIDS_TOUCH.controls.find((control) => control.id === 'fire-thrust')?.buttons).toEqual(['a', 'b']);
+    expect(TEMPEST_TOUCH.controls.some((control) => control.id === 'fire-thrust')).toBe(false);
+    expect(ASTEROIDS_TOUCH.dragSteering).toBeUndefined();
+    expect(TEMPEST_TOUCH.dragSteering).toBe(true);
   });
 });
 
-describe('joystick vector', () => {
-  it('is neutral at screen center', () => {
-    expect(joystickVector(600, 350, rect)).toEqual({ x: 0, y: 0 });
+describe('relative horizontal steering', () => {
+  it('starts neutral at any touch origin and ignores tiny movements', () => {
+    expect(dragSteering(450, 450, 100)).toBe(0);
+    expect(dragSteering(450, 455, 100)).toBe(0);
   });
-
-  it('preserves direction while clamping magnitude to one', () => {
-    const v = joystickVector(1600, 950, rect);
-    expect(Math.hypot(v.x, v.y)).toBeCloseTo(1, 10);
-    expect(v.x).toBeGreaterThan(0);
-    expect(v.y).toBeGreaterThan(0);
-  });
-
-  it('returns proportional movement inside the joystick radius', () => {
-    const v = joystickVector(600 + 46.5, 350, rect); // half of min(1000,600)*.155
-    expect(v.x).toBeCloseTo(0.5, 10);
-    expect(v.y).toBeCloseTo(0, 10);
+  it('scales both directions and clamps at full steering', () => {
+    expect(dragSteering(450, 500, 100)).toBe(0.5);
+    expect(dragSteering(450, 400, 100)).toBe(-0.5);
+    expect(dragSteering(450, 800, 100)).toBe(1);
+    expect(dragSteering(450, 100, 100)).toBe(-1);
+    expect(dragSteering(0, 10, 0)).toBe(1);
   });
 });

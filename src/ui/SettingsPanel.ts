@@ -15,7 +15,7 @@ export class SettingsPanel {
     this.element.dataset.ui = 'true';
     this.element.innerHTML = `
       <div class="settings-header">
-        <span>VECTOR DISPLAY CALIBRATION</span>
+        <span>VECTOR DISPLAY & CONTROLS</span>
         <button type="button" class="settings-close" data-ui="true" aria-label="Close settings">×</button>
       </div>
       ${this.slider('beamIntensity', 'BEAM INTENSITY', 0.25, 2.0, 0.05)}
@@ -27,6 +27,10 @@ export class SettingsPanel {
       ${this.slider('scanlines', 'SCANLINE INTENSITY', 0, 0.7, 0.01)}
       ${this.slider('vignette', 'EDGE VIGNETTE', 0, 0.75, 0.01)}
       ${this.slider('controlOpacity', 'CONTROL OVERLAY', 0.05, 0.7, 0.01)}
+      ${this.slider('controlSize', 'CONTROL SIZE (PX)', 56, 100, 2)}
+      ${this.slider('controlInset', 'CONTROL EDGE SPACING (PX)', 8, 48, 2)}
+      ${this.toggleControl('dragSteering', 'TEMPEST DRAG STEERING')}
+      ${this.toggleControl('combinedFireThrust', 'FIRE + THRUST BUTTON')}
       <div class="settings-actions">
         <button type="button" class="settings-return" data-ui="true">RETURN TO ARCADE MENU</button>
       </div>
@@ -41,10 +45,10 @@ export class SettingsPanel {
       this.onReturnToMenu?.();
     });
 
-    this.element.querySelectorAll<HTMLInputElement>('input[type="range"]').forEach((input) => {
+    this.element.querySelectorAll<HTMLInputElement>('input[data-setting]').forEach((input) => {
       input.addEventListener('input', () => {
         const key = input.dataset.setting as keyof GraphicsSettings;
-        this.settings[key] = Number(input.value);
+        this.settings[key] = input.type === 'checkbox' ? Number(input.checked) : Number(input.value);
         const output = this.element.querySelector<HTMLElement>(`[data-value="${String(key)}"]`);
         if (output) output.textContent = this.formatValue(key, this.settings[key]);
         this.onChange();
@@ -68,6 +72,12 @@ export class SettingsPanel {
 
   isVisible(): boolean {
     return this.visible;
+  }
+
+  private toggleControl(key: 'dragSteering' | 'combinedFireThrust', label: string): string {
+    return `<label class="settings-row"><span>${label}</span>
+      <input data-setting="${key}" data-ui="true" type="checkbox" ${this.settings[key] ? 'checked' : ''} />
+    </label>`;
   }
 
   private slider(key: keyof GraphicsSettings, label: string, min: number, max: number, step: number): string {

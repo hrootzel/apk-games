@@ -22,7 +22,14 @@ through that registry rather than hard-coding game classes into menu markup.
 2. Each game implements the small `ArcadeGame` contract: resize, update,
    vector-path emission, HUD text, and serializable debug state.
 3. Randomness in simulations must be injectable for deterministic tests.
-4. Shared touch bindings remain A/B/X/Y + L/R + Start/Select + central joystick.
+4. Shared logical input remains A/B/X/Y + L/R + Start/Select + analog axes.
+   Touch layouts are per-game profiles declared through the game registry:
+   lower-left steering, lower-right labeled actions, and a clear screen center.
+   Use explicit DOM hit targets, not screen-wide quadrants. Asteroids offers
+   Fire + Thrust; Tempest offers optional horizontal drag steering. Control size
+   and edge spacing are configurable. Retain keyboard and deterministic input
+   bridge support; clear held touch input on cancellation, focus loss, and
+   shell/profile transitions.
 5. The top-level menu and configuration are shell concerns; game code must not
    own DOM navigation.
 6. The CRT/vector appearance comes primarily from GPU beam/phosphor rendering,

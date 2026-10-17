@@ -1,48 +1,53 @@
-import type { ButtonName, Vec2 } from '../game/types';
+import type { ButtonName } from '../game/types';
 
-export type TouchBinding = ButtonName | 'joystick';
-
-export interface TouchLayoutRect {
-  left: number;
-  top: number;
-  width: number;
-  height: number;
+export interface TouchControl {
+  id: ButtonName | 'fire-thrust';
+  label: string;
+  buttons: readonly ButtonName[];
+  side: 'left' | 'right' | 'system';
+  primary?: boolean;
 }
 
-export function classifyTouchBinding(
-  clientX: number,
-  clientY: number,
-  rect: TouchLayoutRect,
-  joystickAvailable = true,
-): TouchBinding {
-  const x = clientX - rect.left;
-  const y = clientY - rect.top;
-  const width = Math.max(1, rect.width);
-  const height = Math.max(1, rect.height);
-  const cx = width / 2;
-  const cy = height / 2;
-  const topStrip = height * 0.105;
-  const bottomStrip = height * 0.105;
-  const joystickRadius = Math.min(width, height) * 0.19;
-
-  if (y <= topStrip) return x < cx ? 'l' : 'r';
-  if (y >= height - bottomStrip) return x < cx ? 'select' : 'start';
-
-  if (joystickAvailable && Math.hypot(x - cx, y - cy) <= joystickRadius) return 'joystick';
-  if (y < cy) return x < cx ? 'y' : 'x';
-  return x < cx ? 'b' : 'a';
+export interface TouchProfile {
+  controls: readonly TouchControl[];
+  dragSteering?: boolean;
 }
 
-export function joystickVector(clientX: number, clientY: number, rect: TouchLayoutRect): Vec2 {
-  const cx = rect.left + rect.width / 2;
-  const cy = rect.top + rect.height / 2;
-  const radius = Math.max(1, Math.min(rect.width, rect.height) * 0.155);
-  const dx = clientX - cx;
-  const dy = clientY - cy;
-  const length = Math.hypot(dx, dy);
-  const scale = length > radius ? radius / length : 1;
-  return {
-    x: (dx * scale) / radius,
-    y: (dy * scale) / radius,
-  };
+const steering: TouchControl[] = [
+  { id: 'l', label: '◀', buttons: ['l'], side: 'left', primary: true },
+  { id: 'r', label: '▶', buttons: ['r'], side: 'left', primary: true },
+];
+const system: TouchControl[] = [
+  { id: 'select', label: 'SELECT · SETTINGS', buttons: ['select'], side: 'system' },
+  { id: 'start', label: 'START · PAUSE', buttons: ['start'], side: 'system' },
+];
+
+export const ASTEROIDS_TOUCH: TouchProfile = {
+  controls: [
+    ...steering,
+    { id: 'y', label: 'BRAKE', buttons: ['y'], side: 'left' },
+    { id: 'x', label: 'HYPERSPACE', buttons: ['x'], side: 'right' },
+    { id: 'b', label: 'THRUST', buttons: ['b'], side: 'right', primary: true },
+    { id: 'a', label: 'FIRE', buttons: ['a'], side: 'right', primary: true },
+    { id: 'fire-thrust', label: 'FIRE + THRUST', buttons: ['a', 'b'], side: 'right' },
+    ...system,
+  ],
+};
+
+export const TEMPEST_TOUCH: TouchProfile = {
+  dragSteering: true,
+  controls: [
+    ...steering,
+    { id: 'y', label: 'PRECISION', buttons: ['y'], side: 'left' },
+    { id: 'x', label: 'JUMP', buttons: ['x'], side: 'right' },
+    { id: 'b', label: 'SUPERZAP', buttons: ['b'], side: 'right' },
+    { id: 'a', label: 'FIRE', buttons: ['a'], side: 'right', primary: true },
+    ...system,
+  ],
+};
+
+/** Horizontal displacement controls steering speed; lifting immediately releases it. */
+export function dragSteering(startX: number, currentX: number, travel: number): number {
+  const displacement = (currentX - startX) / Math.max(1, travel);
+  return Math.abs(displacement) < 0.06 ? 0 : Math.max(-1, Math.min(1, displacement));
 }

@@ -24,7 +24,7 @@ A full-color vector tube shooter inspired by classic vector arcade design. The s
 
 ### CONFIGURATION
 
-Top-level global display/input configuration. Current settings cover beam intensity, phosphor bloom, persistence, diffusion, RGB decay separation, beam jitter, scanlines, vignette, and touch-overlay opacity. The shell is structured so additional system-level settings can be added here without coupling them to a particular game.
+Top-level global display/input configuration. Current settings cover beam intensity, phosphor bloom, persistence, diffusion, RGB decay separation, beam jitter, scanlines, vignette, touch-overlay opacity, control size/spacing, and game-specific touch options. The shell is structured so additional system-level settings can be added here without coupling them to a particular game.
 
 ## Arcade shell
 
@@ -33,7 +33,7 @@ Games are registered in `src/app/gameRegistry.ts`. The top-level scrolling progr
 Menu input:
 
 - touch any program directly;
-- joystick up/down + **A** selects;
+- keyboard arrows navigate and **Space** selects;
 - keyboard arrows + Space work during browser development.
 
 While a game is running:
@@ -45,15 +45,24 @@ While a game is running:
 
 ## Shared tablet control surface
 
-Every game receives the same multi-touch input model:
+Games share logical A/B/X/Y, L/R, Start/Select, and analog axes, with touch
+profiles supplied by the game registry. The center stays clear; only the visible
+buttons and drag strip accept gameplay touches.
 
-- central analog joystick;
-- Y / X upper quadrants;
-- B / A lower quadrants;
-- L / R thin strips across the top;
-- Select / Start thin strips across the bottom.
+- **Asteroids:** lower-left rotate arrows and Brake; lower-right Fire, Thrust,
+  Hyperspace, and an optional Fire + Thrust button for simultaneous shooting and
+  acceleration with one thumb.
+- **Tempest:** lower-left movement arrows and Precision; lower-right Fire,
+  Superzap, and Jump. Configuration can replace the arrows with a horizontal
+  drag strip: touch anywhere on it, drag left/right to steer, lift to release.
+- **System:** compact Select / Settings and Start / Pause controls at the top
+  right. Start+Select returns to the arcade shell; Escape does the same on desktop.
 
-Multiple touch pointers are tracked independently, so steering + fire + another action can be held simultaneously.
+Configuration adjusts control opacity, size, edge spacing, Tempest drag steering,
+and the combined Asteroids button. Settings apply across games for the current
+session. Multiple pointers are tracked independently, including overlapping
+Fire and Fire + Thrust holds. Cancellation, focus loss, and shell transitions
+release held input. Keyboard controls and the E2E analog bridge remain available.
 
 ## GPU phosphor renderer
 
@@ -87,7 +96,7 @@ The container runs:
 3. optimized Vite production compilation;
 4. **9 Playwright Chromium/Pixi/WebGL integration tests**.
 
-The unit suite covers Asteroids, Tempest, menu state/scrolling, registry construction, input geometry, phosphor math, and settings. The browser suite covers the actual top-level menu, Configuration, both games, GPU startup, multi-touch, keyboard navigation, return-to-menu behavior, and orientation resizing.
+The unit suite covers Asteroids, Tempest, menu state/scrolling, registry construction, touch profiles/drag steering, phosphor math, and settings. The browser suite covers the actual top-level menu, Configuration, both games, GPU startup, multi-touch, keyboard navigation, return-to-menu behavior, and orientation resizing.
 
 See [`TESTING.md`](TESTING.md) for the detailed matrix and thresholds.
 
@@ -174,7 +183,7 @@ and full-reset procedures.
 
 Version 0.4.4 replaces fixed-duration synthetic multi-touch pulses with a
 deterministic E2E controller bridge available only under `?e2e=1`. One browser
-test still exercises real PointerEvents through the visible L/R strips. The
+test still exercises real PointerEvents through the visible L/R steering buttons. The
 remaining controller/chord tests drive the same TouchController snapshot path
 and wait for observable game/shell state transitions. This makes the headed
 Xvfb suite independent of SwiftShader frame timing while retaining a real
