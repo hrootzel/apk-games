@@ -67,6 +67,27 @@ RUN --mount=type=cache,target=/home/node/.npm,uid=1000,gid=1000,sharing=locked \
       npm install --prefer-offline --no-audit --no-fund; \
     fi
 
+# Capacitor 8's Android modules compile at Java source/target level 21.
+# Keep Bookworm + the existing JDK 17 for the earlier Android SDK setup layer,
+# then install JDK 21 late so Playwright/SDK/npm layers above remain cacheable.
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends apt-transport-https lsb-release \
+    && wget -q https://packages.microsoft.com/config/debian/12/packages-microsoft-prod.deb -O /tmp/packages-microsoft-prod.deb \
+    && dpkg -i /tmp/packages-microsoft-prod.deb \
+    && rm -f /tmp/packages-microsoft-prod.deb \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends msopenjdk-21 \
+    && JDK21_DIR="$(find /usr/lib/jvm -maxdepth 1 -mindepth 1 -type d -name 'msopenjdk-21*' -print -quit)" \
+    && test -n "$JDK21_DIR" \
+    && ln -sfn "$JDK21_DIR" /opt/jdk21 \
+    && /opt/jdk21/bin/java -version \
+    && /opt/jdk21/bin/javac -version \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV JAVA_HOME=/opt/jdk21 \
+    PATH=/opt/jdk21/bin:${PATH}
+
 # Let Node/Vite resolve bare imports from bind-mounted /workspace source while
 # keeping node_modules outside that bind mount. npm scripts find executables via
 # PATH above; module resolution can walk up to /node_modules.

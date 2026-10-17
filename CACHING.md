@@ -172,3 +172,19 @@ docker compose run --rm --build apk
 
 You do **not** need to delete the BuildKit npm cache for this error. The npm
 cache contents are independent of the directory ownership problem.
+
+## Java 21 and Gradle wrapper
+
+Capacitor 8 compiles its Android modules with Java 21. The image therefore
+installs Microsoft OpenJDK 21 late in the Dockerfile and sets `JAVA_HOME` to
+`/opt/jdk21`. `scripts/build-apk.sh` prints `java -version`/`javac -version` and
+fails before Gradle if the compiler major version is below 21.
+
+The APK script also changes Capacitor's generated Gradle wrapper URL from the
+`-all.zip` distribution to `-bin.zip`. The binary distribution is sufficient
+for container builds and avoids downloading/unpacking Gradle documentation and
+sources.
+
+After applying the JDK fix, a normal `docker compose build` is sufficient.
+Docker can reuse all unchanged layers above the new Java-21 layer. Use
+`--no-cache` only if you intentionally want to discard all image-layer caches.

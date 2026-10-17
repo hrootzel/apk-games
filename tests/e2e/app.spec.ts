@@ -19,8 +19,19 @@ async function waitForArcade(page: Page) {
 
 async function launch(page: Page, gameId: 'asteroids' | 'tempest') {
   await waitForArcade(page);
+  const menuFrame = (await snapshot(page)).frameCount;
   await page.locator(`.arcade-menu-item[data-entry-id="${gameId}"]`).click();
-  await expect.poll(async () => (await snapshot(page)).activeGameId, { timeout: 15_000 }).toBe(gameId);
+
+  // startGame() switches mode synchronously, while HUD text is refreshed by the
+  // next Pixi ticker frame. Wait for the actual game state and at least one
+  // post-menu frame instead of reading the previous menu HUD.
+  await expect.poll(async () => {
+    const current = await snapshot(page);
+    return current.mode === 'game'
+      && current.activeGameId === gameId
+      && current.game !== null
+      && current.frameCount > menuFrame;
+  }, { timeout: 15_000 }).toBe(true);
 }
 
 async function setButton(page: Page, button: ButtonName, pressed: boolean, pointerId = 9000) {
@@ -152,7 +163,8 @@ test.describe('Vector Arcade shell and GPU integration', () => {
   test('launches Tempest and advances the tube-shooter simulation', async ({ page }) => {
     await launch(page, 'tempest');
     const before = await snapshot(page);
-    expect(before.hud).toContain('TUBE VECTOR');
+    expect(before.mode).toBe('game');
+    expect(before.activeGameId).toBe('tempest');
     expect((before.game as { laneCount: number }).laneCount).toBe(16);
     const initialLane = (before.game as { playerLane: number }).playerLane;
 

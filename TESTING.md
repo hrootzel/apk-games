@@ -174,3 +174,11 @@ or `src/tests`. Those paths usually mean a patch was applied while the current
 directory was `./src` instead of the project root. If this guard fires, remove
 only those accidental nested paths and re-apply the update from the directory
 that contains `package.json`, `compose.yaml`, `Dockerfile`, `src/`, and `tests/`.
+
+## E2E launch-state synchronization
+
+`GameApp.startGame()` switches `mode` and `activeGameId` immediately, but the HUD
+text is refreshed on the following Pixi ticker frame. Browser tests therefore
+must not use the previous HUD text as proof that a launch completed. The shared
+`launch()` helper waits for `mode === "game"`, the expected `activeGameId`, a
+non-null exported game state, and at least one frame after the menu click.
