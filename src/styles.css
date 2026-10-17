@@ -1,0 +1,335 @@
+:root {
+  color-scheme: dark;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  background: #010302;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #010302;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+#app {
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+  --scanline-alpha: 0.18;
+  --vignette-alpha: 0.32;
+}
+
+.game-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#app::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, calc(var(--scanline-alpha) * 0.10)) 0,
+      rgba(255, 255, 255, calc(var(--scanline-alpha) * 0.10)) 1px,
+      rgba(0, 0, 0, calc(var(--scanline-alpha) * 0.38)) 2px,
+      rgba(0, 0, 0, calc(var(--scanline-alpha) * 0.38)) 3px
+    ),
+    radial-gradient(
+      ellipse at center,
+      transparent 47%,
+      rgba(0, 8, 5, calc(var(--vignette-alpha) * 0.42)) 76%,
+      rgba(0, 0, 0, var(--vignette-alpha)) 100%
+    );
+  mix-blend-mode: normal;
+}
+
+.touch-overlay {
+  --control-opacity: 0.28;
+  position: absolute;
+  inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  z-index: 10;
+  pointer-events: none;
+  color: rgba(120, 244, 255, var(--control-opacity));
+}
+
+.zone {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-color: rgba(120, 244, 255, calc(var(--control-opacity) * 0.6));
+  color: rgba(150, 248, 255, var(--control-opacity));
+  text-shadow: 0 0 12px rgba(60, 220, 255, calc(var(--control-opacity) * 0.8));
+  font-size: clamp(16px, 2vw, 30px);
+  letter-spacing: 0.2em;
+  transition: background-color 60ms linear, color 60ms linear;
+}
+
+.zone.active {
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(90, 235, 255, 0.10);
+}
+
+.zone.strip.top {
+  top: 0;
+  height: 10.5%;
+  border-bottom: 1px solid;
+}
+
+.zone.strip.bottom {
+  bottom: 0;
+  height: 10.5%;
+  border-top: 1px solid;
+  font-size: clamp(10px, 1.2vw, 18px);
+}
+
+.zone.left { left: 0; width: 50%; }
+.zone.right { right: 0; width: 50%; }
+
+.zone.face {
+  height: 39.5%;
+  width: 50%;
+  font-size: clamp(26px, 4.5vw, 68px);
+}
+
+.zone.face.upper { top: 10.5%; }
+.zone.face.lower { bottom: 10.5%; }
+.zone.face.left { border-right: 1px solid rgba(120, 244, 255, calc(var(--control-opacity) * 0.22)); }
+.zone.face.upper { border-bottom: 1px solid rgba(120, 244, 255, calc(var(--control-opacity) * 0.22)); }
+
+.joystick-shell {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(38vw, 38vh);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+}
+
+.joystick-ring {
+  position: absolute;
+  inset: 2%;
+  border: 1px solid rgba(120, 244, 255, calc(var(--control-opacity) * 0.85));
+  border-radius: 50%;
+  box-shadow: inset 0 0 22px rgba(80, 235, 255, calc(var(--control-opacity) * 0.18)), 0 0 18px rgba(80, 235, 255, calc(var(--control-opacity) * 0.15));
+}
+
+.joystick-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 28%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(210, 255, 255, calc(var(--control-opacity) * 0.95));
+  border-radius: 50%;
+  background: rgba(80, 235, 255, calc(var(--control-opacity) * 0.08));
+  box-shadow: 0 0 16px rgba(100, 245, 255, calc(var(--control-opacity) * 0.4));
+}
+
+.settings-panel {
+  position: absolute;
+  z-index: 30;
+  left: 50%;
+  top: 50%;
+  width: min(680px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  padding: 18px 20px 22px;
+  border: 1px solid rgba(112, 249, 221, 0.68);
+  background: rgba(0, 12, 9, 0.94);
+  color: #aaffdf;
+  box-shadow: 0 0 30px rgba(20, 255, 190, 0.18), inset 0 0 24px rgba(20, 255, 190, 0.06);
+  touch-action: auto;
+}
+
+.settings-panel.hidden { display: none; }
+
+.settings-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+  letter-spacing: 0.13em;
+  font-size: 14px;
+}
+
+.settings-close {
+  width: 36px;
+  height: 36px;
+  border: 1px solid rgba(112, 249, 221, 0.5);
+  color: #caffef;
+  background: transparent;
+  font-size: 24px;
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) minmax(180px, 2fr) 70px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+}
+
+.settings-row input { width: 100%; }
+.settings-row output { text-align: right; color: #eafff8; }
+.settings-help { margin-top: 14px; line-height: 1.55; color: rgba(190, 255, 235, 0.66); font-size: 11px; }
+
+@media (max-width: 700px) {
+  .settings-row {
+    grid-template-columns: 1fr 72px;
+  }
+  .settings-row input {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+}
+
+.hidden { display: none !important; }
+
+.arcade-menu {
+  position: absolute;
+  z-index: 24;
+  left: 50%;
+  top: 50%;
+  width: min(760px, calc(100vw - 64px));
+  max-height: calc(100vh - 92px);
+  transform: translate(-50%, -50%);
+  padding: 26px 30px 24px;
+  border: 1px solid rgba(92, 255, 211, 0.62);
+  background: rgba(0, 9, 8, 0.86);
+  color: #b8ffe8;
+  box-shadow: inset 0 0 34px rgba(36, 255, 204, 0.055), 0 0 24px rgba(36, 255, 204, 0.08);
+  touch-action: pan-y;
+}
+
+.arcade-menu-kicker {
+  color: rgba(127, 244, 255, 0.66);
+  font-size: clamp(10px, 1.15vw, 14px);
+  letter-spacing: 0.28em;
+  margin-bottom: 7px;
+}
+
+.arcade-menu-title {
+  color: #e9fff8;
+  font-size: clamp(24px, 3.2vw, 42px);
+  letter-spacing: 0.17em;
+  text-shadow: 0 0 18px rgba(84, 255, 211, 0.34);
+  margin-bottom: 20px;
+}
+
+.arcade-menu-list {
+  max-height: min(54vh, 480px);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(105, 255, 221, 0.45) rgba(0, 20, 16, 0.35);
+  border-top: 1px solid rgba(105, 255, 221, 0.22);
+  border-bottom: 1px solid rgba(105, 255, 221, 0.22);
+}
+
+.arcade-menu-item {
+  width: 100%;
+  min-height: 76px;
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 12px;
+  align-items: center;
+  text-align: left;
+  padding: 12px 14px;
+  border: 0;
+  border-bottom: 1px solid rgba(105, 255, 221, 0.12);
+  background: transparent;
+  color: rgba(185, 255, 232, 0.72);
+  font: inherit;
+  cursor: pointer;
+}
+
+.arcade-menu-item:last-child { border-bottom: 0; }
+
+.arcade-menu-item.selected,
+.arcade-menu-item:focus-visible {
+  outline: none;
+  background: linear-gradient(90deg, rgba(78, 255, 210, 0.12), rgba(95, 195, 255, 0.035));
+  color: #f1fffb;
+  text-shadow: 0 0 14px rgba(86, 255, 213, 0.38);
+}
+
+.arcade-menu-marker {
+  color: #68ffda;
+  font-size: 20px;
+  text-align: center;
+}
+
+.arcade-menu-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.arcade-menu-name {
+  font-size: clamp(17px, 2vw, 26px);
+  letter-spacing: 0.16em;
+}
+
+.arcade-menu-subtitle {
+  color: rgba(165, 237, 225, 0.52);
+  font-size: clamp(10px, 1.05vw, 13px);
+  letter-spacing: 0.07em;
+}
+
+.arcade-menu-status {
+  margin-top: 16px;
+  color: rgba(160, 244, 228, 0.5);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.09em;
+}
+
+.settings-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.settings-return {
+  min-height: 42px;
+  padding: 0 16px;
+  border: 1px solid rgba(112, 249, 221, 0.48);
+  background: rgba(50, 255, 205, 0.06);
+  color: #d8fff3;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.11em;
+}
+
+@media (max-width: 700px) {
+  .arcade-menu {
+    width: calc(100vw - 28px);
+    padding: 20px 16px 18px;
+  }
+  .arcade-menu-item { min-height: 68px; }
+}

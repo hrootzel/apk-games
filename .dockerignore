@@ -1,0 +1,12 @@
+.git
+.gitignore
+node_modules
+dist
+.cache
+coverage
+playwright-report
+test-results
+out
+android
+*.log
+.DS_Store

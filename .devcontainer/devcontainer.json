@@ -1,0 +1,16 @@
+{
+  "name": "Vector Arcade - PixiJS Android",
+  "dockerComposeFile": "../compose.yaml",
+  "service": "shell",
+  "workspaceFolder": "/workspace",
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode",
+        "ms-vscode.vscode-typescript-next"
+      ]
+    }
+  }
+}
