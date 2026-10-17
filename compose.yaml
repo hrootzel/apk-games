@@ -1,3 +1,4 @@
+# Invoke scripts through Bash: Git/Windows checkouts may not preserve executable bits.
 x-image: &image
   image: vector-arcade-local:0.4.4
   build:
@@ -19,7 +20,7 @@ services:
     tty: true
     volumes:
       - .:/workspace
-    command: ./scripts/shell.sh
+    command: ["bash", "./scripts/shell.sh"]
 
   dev:
     <<: *image
@@ -27,7 +28,7 @@ services:
       - "5173:5173"
     volumes:
       - .:/workspace
-    command: ./scripts/dev.sh
+    command: ["bash", "./scripts/dev.sh"]
 
   # CI/build services intentionally use the source snapshot baked into the
   # image. After source edits, run `docker compose build` before these commands.
@@ -37,13 +38,13 @@ services:
     ipc: host
     volumes:
       - ./out:/workspace/out
-    command: ./scripts/test.sh
+    command: ["bash", "./scripts/test.sh"]
 
   web:
     <<: *image
     volumes:
       - ./out:/workspace/out
-    command: ./scripts/build-web.sh
+    command: ["bash", "./scripts/build-web.sh"]
 
   apk:
     <<: *image
@@ -54,4 +55,4 @@ services:
       # Gradle's cache is intentionally visible and easy to delete; unlike
       # node_modules it is not hidden in a Docker named volume.
       - ./.cache/gradle:/workspace/.cache/gradle
-    command: ./scripts/build-apk.sh
+    command: ["bash", "./scripts/build-apk.sh"]

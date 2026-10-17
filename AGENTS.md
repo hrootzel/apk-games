@@ -48,6 +48,10 @@ docker compose run --rm test
 This must pass strict TypeScript, Vitest coverage, production Vite compilation,
 and Playwright Chromium/WebGL integration tests.
 
+Invoke shell scripts explicitly with `bash` in Compose, npm scripts, and nested
+script calls; fresh Git checkouts may not preserve executable permissions. Keep
+shell scripts LF-terminated via `.gitattributes`.
+
 GitHub Actions runs the same suite through `.github/workflows/ci.yml` on pushes
 and pull requests. Keep CI on the shared Compose `test` service; do not duplicate
 or weaken its checks in workflow YAML. CI must build the checked-out source into

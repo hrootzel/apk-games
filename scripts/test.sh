@@ -18,6 +18,6 @@ preserve_failure_artifacts() {
 }
 trap preserve_failure_artifacts EXIT
 
-./scripts/check-layout.sh
+bash ./scripts/check-layout.sh
 npm run test:ci
 trap - EXIT

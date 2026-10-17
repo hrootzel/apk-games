@@ -61,6 +61,19 @@ when package metadata changes, npm may need to download packages again. Cache
 availability affects build speed, not which checks run. No cache or registry
 credentials need to be configured manually.
 
+## Shell script permissions across WSL and GitHub
+
+Git tracks the shell scripts as non-executable files (`100644`). WSL checkouts
+under `/mnt/c` can expose executable permissions that a fresh Linux Git checkout
+does not. The base Node image treats a non-executable command as a JavaScript
+entrypoint, causing `ERR_UNKNOWN_FILE_EXTENSION` for `.sh` files.
+
+Compose services, npm's E2E command, and nested script calls invoke `bash`
+explicitly so neither CI nor bind-mounted development requires executable bits.
+`.gitattributes` keeps shell scripts LF-terminated across Windows checkouts. After
+changing these commands, rebuild with `docker compose build` before testing.
+The APK script still runs the complete test gate before Gradle.
+
 ## Dependency changes
 
 After changing `package.json` or `package-lock.json`:

@@ -4,7 +4,7 @@ cd /workspace
 
 # Hard quality gate: typecheck, unit coverage, production web build, and
 # Chromium/Pixi/WebGL integration tests must all pass before Gradle runs.
-./scripts/test.sh
+bash ./scripts/test.sh
 
 # Capacitor 8 Android builds require Java source level 21. Fail here with a
 # useful diagnostic instead of much later in :capacitor-android:compileDebugJavaWithJavac.
