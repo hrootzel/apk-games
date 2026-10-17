@@ -48,6 +48,11 @@ docker compose run --rm test
 This must pass strict TypeScript, Vitest coverage, production Vite compilation,
 and Playwright Chromium/WebGL integration tests.
 
+GitHub Actions runs the same suite through `.github/workflows/ci.yml` on pushes
+and pull requests. Keep CI on the shared Compose `test` service; do not duplicate
+or weaken its checks in workflow YAML. CI must build the checked-out source into
+the image before testing and preserve browser failure artifacts.
+
 APK builds are gated by that same suite:
 
 ```bash

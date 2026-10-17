@@ -48,6 +48,19 @@ at `/workspace`, while resolving dependencies from the image at
 docker compose up --build dev
 ```
 
+## GitHub Actions cache
+
+`.github/workflows/ci.yml` uses Docker Buildx with GitHub Actions layer caching
+(`type=gha`, scope `vector-arcade`). It loads the resulting image into the runner's
+Docker daemon under the tag read from Compose, then runs the `test` service with
+`--pull never` so the gate tests that exact source snapshot.
+
+The cache reuses image layers, including the installed SDK, browser, Java, and npm
+dependencies. BuildKit's npm cache mount is not exported by this layer cache;
+when package metadata changes, npm may need to download packages again. Cache
+availability affects build speed, not which checks run. No cache or registry
+credentials need to be configured manually.
+
 ## Dependency changes
 
 After changing `package.json` or `package-lock.json`:

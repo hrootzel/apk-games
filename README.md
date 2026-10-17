@@ -43,6 +43,30 @@ While a game is running:
 - **Start + Select** together returns to the arcade menu;
 - **Escape** returns to the menu in desktop/browser debugging.
 
+## GitHub continuous integration
+
+[Container CI](.github/workflows/ci.yml) runs on every push and pull request, and
+can also be started manually from GitHub's Actions tab. It builds the checked-out
+source into the same Docker image used locally, then runs the complete test gate:
+strict TypeScript, Vitest with coverage thresholds, production Vite compilation,
+and headed Playwright Chromium/WebGL tests under Xvfb. A failure fails the check.
+
+Docker layers are cached between runs. The first build may take longer while
+Chromium, the Android SDK, Java, and npm dependencies are installed into the image.
+No registry credentials or additional repository secrets are required. Superseded
+runs on the same branch or pull request are canceled.
+
+Download browser reports, failure traces/screenshots/videos, and control-layout
+screenshots from the run's `test-reports` artifact (retained for 14 days). Coverage
+reports are included when the test script preserves failure artifacts. Build
+failures before tests start may have no test artifacts; inspect the Actions log.
+
+After the workflow has run on GitHub, configure a branch protection rule or
+ruleset for the default branch and require **Docker test gate** to pass before
+merging. The workflow starts checking pushes once this file is pushed; requiring
+it for merges is a separate repository setting. APK packaging remains a separate,
+test-gated build rather than running Gradle on every push.
+
 ## Shared tablet control surface
 
 Games share logical A/B/X/Y, L/R, Start/Select, and analog axes, with touch

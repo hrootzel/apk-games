@@ -1,0 +1,62 @@
+name: Container CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push supersedes an older run for the same branch or pull request.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Docker test gate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Prepare Compose image tag and test output
+        id: compose
+        run: |
+          docker compose config --format json | python3 -c 'import json, sys; print("image=" + json.load(sys.stdin)["services"]["test"]["image"])' >> "$GITHUB_OUTPUT"
+          mkdir -p out
+          # The image runs as node (UID 1000); hosted runner UIDs can differ.
+          chmod 0777 out
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      - name: Build and load the test image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        with:
+          context: .
+          load: true
+          push: false
+          tags: ${{ steps.compose.outputs.image }}
+          cache-from: type=gha,scope=vector-arcade
+          cache-to: type=gha,mode=max,scope=vector-arcade
+
+      - name: Run the complete container test gate
+        run: docker compose run --rm --pull never test
+
+      - name: Upload test reports and screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: test-reports-${{ github.run_attempt }}
+          path: |
+            out/playwright-report/
+            out/test-results/
+            out/test-artifacts/
+            out/controls-*.png
+          if-no-files-found: ignore
+          retention-days: 14
