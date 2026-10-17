@@ -1,85 +1,98 @@
-# Test harness
+# Vector Arcade test harness
 
-The project has two complementary test layers and both execute inside the same Docker image used for Android builds.
+The project is designed so the same Docker toolchain used for development also
+runs the CI gate that protects APK generation.
 
-## One-command CI suite
+## One-command container test
 
 ```bash
+docker compose build
 docker compose run --rm test
 ```
 
-This performs, in order:
+The `test` service runs, in order:
 
-1. `npm run typecheck` — strict TypeScript checking across application, unit tests, and test configs.
-2. `npm run test:coverage` — deterministic Vitest unit tests with V8 coverage thresholds.
-3. `npm run build:web` — the actual optimized Vite production bundle.
-4. `npm run test:e2e` — Playwright launches pinned Chromium against that production bundle and exercises Pixi/WebGL plus input/UI integration.
+1. strict TypeScript type checking;
+2. Vitest unit tests with V8 coverage enforcement;
+3. a production Vite build;
+4. Playwright Chromium integration tests against that production bundle.
 
-The `apk` service calls the same script before `cap sync` or Gradle, so a failed test blocks APK generation.
-
-## Unit coverage scope
-
-V8 coverage is enforced for deterministic application logic:
-
-- `src/game/AsteroidsGame.ts`
-- `src/input/layout.ts`
-- `src/graphics/phosphorMath.ts`
-- `src/graphics/settings.ts`
-
-Global thresholds are 80% lines/functions/statements and 70% branches. The small input-layout and phosphor-math modules have higher file-specific thresholds.
-
-The unit suite covers:
-
-- inertial motion, steering, thrust, brake, wrapping
-- pause and settings press-edge semantics
-- fire cooldown and bullet expiry
-- large/small asteroid destruction and scoring
-- toroidal collision detection
-- ship collision/respawn
-- deterministic hyperspace
-- automatic new waves
-- deep state export/import behavior
-- vector-path emission
-- all touch zones and central joystick math
-- joystick clamping/proportional movement
-- frame-rate-independent phosphor decay/diffusion and RGB separation
-- graphics-default range invariants
-
-## Browser/WebGL integration coverage
-
-Playwright uses the exact Chromium revision matched to `@playwright/test` and installed into the Docker image. Tests run against `vite preview`, not the development server.
-
-The browser suite verifies:
-
-- Pixi starts on a WebGL canvas and the ticker advances
-- no uncaught page errors during boot
-- simultaneous joystick + A multi-pointer input
-- simultaneous L/R strip input
-- Select opens display calibration
-- Start pauses the game
-- desktop keyboard fallback
-- portrait/landscape viewport resizing propagates to Pixi
-- live settings changes do not stop rendering
-
-On failure, Playwright retains traces, screenshots, and video under `test-results/`; its HTML report is under `playwright-report/`.
-
-## Useful commands
+APK generation runs the same gate first:
 
 ```bash
-# Full containerized quality gate
-docker compose run --rm test
-
-# Interactive shell in the same image
-docker compose run --rm shell
-
-# Inside the shell
-npm run test:unit
-npm run test:coverage
-npm run build:web
-npm run test:e2e
-
-# APK: automatically executes the full gate first
 docker compose run --rm apk
 ```
 
-A real Samsung tablet smoke test remains valuable after automated CI, particularly for Android WebView GPU-driver behavior, device pixel ratio, sustained frame rate, thermal throttling, and true hardware multi-touch latency.
+If any test, coverage threshold, type check, production build, or browser test
+fails, Gradle is not invoked and no APK is emitted.
+
+## Current coverage matrix
+
+### Deterministic unit suite
+
+- **Asteroids**: inertial movement, wrapping, thrust/brake, pause/settings edges,
+  hyperspace, firing cadence, bullet lifetime, asteroid splitting, toroidal
+  collisions, ship respawn, wave lifecycle, deep state export/import, and
+  emitted vector geometry.
+- **Tempest**: lane/rim movement and seam wrapping, precision movement,
+  pause/settings edges, phase jump, repeated fire/cooldown, bullet expiration,
+  lane/depth projectile collision, seam collisions, super-zap behavior, rim
+  collisions/lives/game reset, auto-spawn/waves, deep state export/import, and
+  complete tube/enemy/projectile/player vector projection.
+- **Arcade menu model**: joystick edge navigation, wraparound, A/Start confirm,
+  scrolling-window bookkeeping, direct selection, invalid IDs, and clamping.
+- **Game registry**: stable ordering and correct game factory construction.
+- **Shared input**: every screen binding region, joystick clamping, and boundary
+  behavior.
+- **Phosphor math**: frame-rate-independent persistence, RGB decay separation,
+  diffusion calculations, and parameter bounds.
+- **Graphics settings**: defaults stay within supported UI ranges.
+
+At v0.4 there are **57 unit tests**.
+
+### Chromium/Pixi integration suite
+
+The Playwright suite boots the real optimized Vite bundle with Chromium and a
+software WebGL implementation in the Docker image. It verifies:
+
+- Pixi/WebGL boot and frame progression on the top-level arcade menu;
+- the visible ASTEROIDS / TEMPEST / CONFIGURATION registry UI;
+- opening and changing global Configuration settings;
+- launching Asteroids and preserving simultaneous joystick + A multi-touch;
+- launching Tempest and advancing its movement/fire simulation;
+- simultaneous L/R strip input;
+- in-game Select settings and Start pause behavior;
+- Start+Select return-to-arcade chord;
+- keyboard-only menu navigation/launch;
+- orientation/viewport resize propagation into Pixi and the active game.
+
+At v0.4 there are **9 browser integration tests**.
+
+## Coverage thresholds
+
+Global deterministic-core thresholds:
+
+- lines: 80%
+- statements: 80%
+- functions: 80%
+- branches: 70%
+
+Critical pure subsystems carry stronger file-specific thresholds:
+
+- MenuController: 95% lines/functions/statements, 85% branches
+- touch layout: 95% lines/functions/statements, 85% branches
+- phosphor math: 95% lines/statements, 100% functions, 85% branches
+
+Coverage reports are written to `coverage/`.
+
+## Browser failure artifacts
+
+Playwright keeps useful diagnostics on failure:
+
+- screenshot
+- video
+- browser trace
+- HTML report in `playwright-report/`
+
+These artifacts are especially useful when an AI coding agent changes renderer,
+input, or shell/navigation behavior.

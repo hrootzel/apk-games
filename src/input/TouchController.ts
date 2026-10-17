@@ -59,9 +59,13 @@ export class TouchController {
     this.overlay.style.setProperty('--control-opacity', String(opacity));
   }
 
+  setVisible(visible: boolean): void {
+    this.overlay.classList.toggle('hidden', !visible);
+  }
+
   snapshot(): InputSnapshot {
     const keyboardTurn = (this.keys.has('ArrowRight') ? 1 : 0) - (this.keys.has('ArrowLeft') ? 1 : 0);
-    const keyboardThrust = this.keys.has('ArrowUp') ? -1 : 0;
+    const keyboardVertical = (this.keys.has('ArrowDown') ? 1 : 0) - (this.keys.has('ArrowUp') ? 1 : 0);
 
     const buttons = Object.fromEntries(
       BUTTONS.map((button) => [button, (this.pressed.get(button)?.size ?? 0) > 0]),
@@ -79,7 +83,7 @@ export class TouchController {
     return {
       joystick: {
         x: Math.max(-1, Math.min(1, this.joystick.x + keyboardTurn)),
-        y: Math.max(-1, Math.min(1, this.joystick.y + keyboardThrust)),
+        y: Math.max(-1, Math.min(1, this.joystick.y + keyboardVertical)),
       },
       buttons,
     };

@@ -1,5 +1,5 @@
 {
-  "name": "Vector Asteroids - PixiJS Android",
+  "name": "Vector Arcade - PixiJS Android",
   "dockerComposeFile": "../compose.yaml",
   "service": "shell",
   "workspaceFolder": "/workspace",

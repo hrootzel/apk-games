@@ -1,39 +1,58 @@
-# Vector Asteroids agent notes
+# AGENTS.md — Vector Arcade
 
-## Architecture
-- TypeScript + Vite + PixiJS 8.
-- Production renderer is WebGL. Do not switch Android to WebGPU without an explicit compatibility test.
-- Capacitor 8 wraps the same production web bundle for Android.
-- `AsteroidsGame` emits `VectorPath[]`; CRT/vector behavior belongs in the graphics layer.
-- `TouchController` owns DOM pointer state; pure zone/joystick math belongs in `src/input/layout.ts` so it remains deterministic and unit-testable.
-- `AsteroidsGame` randomness is injectable. New random gameplay behavior must use the injected RNG, not direct `Math.random()`, so tests can remain deterministic.
-- `exportState()` / `importState()` are the supported deterministic state boundary for tests and future save/debug tooling.
+## Project intent
 
-## Controls
-- Center joystick: X turns; up thrusts.
-- A: fire.
-- B: thrust.
-- X: hyperspace.
-- Y: brake.
-- L/R: rotate left/right.
-- Start: pause.
-- Select: graphics settings.
-- Browser fallback: arrows, Space, X/Y, Q/E, P/O.
+This is a tablet-first, full-color vector arcade for Android and browsers.
+TypeScript game simulations emit geometric `VectorPath[]` data. PixiJS owns the
+GPU/WebGL presentation layer, including the ping-pong phosphor feedback surface.
+Do not convert games into sprite/raster engines unless explicitly requested.
 
-## Display goals
-The aesthetic is a futuristic full-color Vectrex/vector oscilloscope. The renderer must derive the look from luminous vector beams, additive bloom, slight beam instability, and phosphor persistence. `VectorRenderer` uses a strict two-framebuffer ping-pong path; never sample from the same render texture currently being written. `PhosphorFilter` owns GPU decay/diffusion; `phosphorMath` owns deterministic timing math. Scanlines/vignette are secondary finishing effects.
+## Current programs
 
-## Tests are part of the architecture
-- Deterministic logic: Vitest under `tests/unit/`.
-- Browser/Pixi/WebGL/multi-pointer integration: Playwright under `tests/e2e/`.
-- Keep pure calculations out of DOM/Pixi classes where practical so unit coverage remains fast.
-- Browser tests run against the built `dist/` bundle, not Vite dev mode.
-- `?e2e=1` exposes a read-only debug snapshot hook used only by integration tests.
-- Failed Playwright runs retain trace/screenshot/video artifacts.
+- `asteroids` — free-flight vector Asteroids clone.
+- `tempest` — pseudo-3D chromatic vector tube shooter.
+- `configuration` — shell-level global display/input settings entry.
 
-## Required checks
-Before considering a code change complete:
-1. `docker compose run --rm test`
-2. For Android-impacting changes: `docker compose run --rm apk`
+Games are registered in `src/app/gameRegistry.ts`; the shell must discover them
+through that registry rather than hard-coding game classes into menu markup.
 
-`apk` already calls the full test gate before Capacitor/Gradle, so never bypass it merely to obtain an APK.
+## Architecture rules
+
+1. Game simulation code belongs under `src/game/` and must not import PixiJS.
+2. Each game implements the small `ArcadeGame` contract: resize, update,
+   vector-path emission, HUD text, and serializable debug state.
+3. Randomness in simulations must be injectable for deterministic tests.
+4. Shared touch bindings remain A/B/X/Y + L/R + Start/Select + central joystick.
+5. The top-level menu and configuration are shell concerns; game code must not
+   own DOM navigation.
+6. The CRT/vector appearance comes primarily from GPU beam/phosphor rendering,
+   not from a decorative scanline overlay.
+7. Start+Select is the universal touch-controller chord for returning to the
+   arcade shell. Escape is the desktop/debug equivalent.
+
+## Required validation
+
+Before considering a change complete, run inside the Docker toolchain:
+
+```bash
+docker compose run --rm test
+```
+
+This must pass strict TypeScript, Vitest coverage, production Vite compilation,
+and Playwright Chromium/WebGL integration tests.
+
+APK builds are gated by that same suite:
+
+```bash
+docker compose run --rm apk
+```
+
+Never bypass the test gate in `scripts/build-apk.sh` to make a build appear to
+work.
+
+## Tests to add with new games/features
+
+Every new game needs deterministic tests for controls, movement/state evolution,
+collisions/scoring, lifecycle/reset behavior, export/import, and representative
+`VectorPath` generation. Every new shell/menu flow needs a pure unit-testable
+state model where practical plus at least one Playwright end-to-end path.

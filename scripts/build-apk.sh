@@ -21,5 +21,5 @@ mkdir -p out .cache/gradle
   GRADLE_USER_HOME=/workspace/.cache/gradle ./gradlew --no-daemon assembleDebug
 )
 
-cp android/app/build/outputs/apk/debug/app-debug.apk out/vector-asteroids-debug.apk
-echo "APK: /workspace/out/vector-asteroids-debug.apk"
+cp android/app/build/outputs/apk/debug/app-debug.apk out/vector-arcade-debug.apk
+echo "APK: /workspace/out/vector-arcade-debug.apk"

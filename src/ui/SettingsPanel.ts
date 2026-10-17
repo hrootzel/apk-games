@@ -3,10 +3,12 @@ import type { GraphicsSettings } from '../graphics/settings';
 export class SettingsPanel {
   readonly element: HTMLDivElement;
   private visible = false;
+  private readonly returnButton: HTMLButtonElement | null;
 
   constructor(
     private readonly settings: GraphicsSettings,
     private readonly onChange: () => void,
+    private readonly onReturnToMenu?: () => void,
   ) {
     this.element = document.createElement('div');
     this.element.className = 'settings-panel hidden';
@@ -14,7 +16,7 @@ export class SettingsPanel {
     this.element.innerHTML = `
       <div class="settings-header">
         <span>VECTOR DISPLAY CALIBRATION</span>
-        <button type="button" class="settings-close" data-ui="true">×</button>
+        <button type="button" class="settings-close" data-ui="true" aria-label="Close settings">×</button>
       </div>
       ${this.slider('beamIntensity', 'BEAM INTENSITY', 0.25, 2.0, 0.05)}
       ${this.slider('glow', 'PHOSPHOR BLOOM', 0.0, 2.0, 0.05)}
@@ -25,10 +27,20 @@ export class SettingsPanel {
       ${this.slider('scanlines', 'SCANLINE INTENSITY', 0, 0.7, 0.01)}
       ${this.slider('vignette', 'EDGE VIGNETTE', 0, 0.75, 0.01)}
       ${this.slider('controlOpacity', 'CONTROL OVERLAY', 0.05, 0.7, 0.01)}
-      <div class="settings-help">SELECT / O toggles this panel · A / Space fires · joystick / arrows steer · B / ↑ thrusts · X hyperspace · Y brake · L/R or Q/E rotate · START / P pauses</div>
+      <div class="settings-actions">
+        <button type="button" class="settings-return" data-ui="true">RETURN TO ARCADE MENU</button>
+      </div>
+      <div class="settings-help">Settings are global across the arcade. SELECT / O opens configuration during a game. START pauses. START + SELECT together returns to the arcade menu.</div>
     `;
 
     this.element.querySelector<HTMLButtonElement>('.settings-close')?.addEventListener('click', () => this.hide());
+    this.returnButton = this.element.querySelector<HTMLButtonElement>('.settings-return');
+    if (!this.onReturnToMenu) this.returnButton?.classList.add('hidden');
+    this.returnButton?.addEventListener('click', () => {
+      this.hide();
+      this.onReturnToMenu?.();
+    });
+
     this.element.querySelectorAll<HTMLInputElement>('input[type="range"]').forEach((input) => {
       input.addEventListener('input', () => {
         const key = input.dataset.setting as keyof GraphicsSettings;
@@ -52,6 +64,10 @@ export class SettingsPanel {
   hide(): void {
     this.visible = false;
     this.element.classList.add('hidden');
+  }
+
+  isVisible(): boolean {
+    return this.visible;
   }
 
   private slider(key: keyof GraphicsSettings, label: string, min: number, max: number, step: number): string {

@@ -11,6 +11,9 @@ export default defineConfig({
       reportsDirectory: 'coverage',
       include: [
         'src/game/AsteroidsGame.ts',
+        'src/game/TempestGame.ts',
+        'src/app/MenuController.ts',
+        'src/app/gameRegistry.ts',
         'src/input/layout.ts',
         'src/graphics/phosphorMath.ts',
         'src/graphics/settings.ts',
@@ -20,6 +23,7 @@ export default defineConfig({
         functions: 80,
         statements: 80,
         branches: 70,
+        'src/app/MenuController.ts': { lines: 95, functions: 95, statements: 95, branches: 85 },
         'src/input/layout.ts': { lines: 95, functions: 95, statements: 95, branches: 85 },
         'src/graphics/phosphorMath.ts': { lines: 95, functions: 100, statements: 95, branches: 85 },
       },
