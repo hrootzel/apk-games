@@ -6,13 +6,12 @@ preserve_failure_artifacts() {
   status=$?
   if [[ $status -ne 0 ]]; then
     mkdir -p /workspace/out/test-artifacts
-    for path in test-results playwright-report coverage; do
-      if [[ -e "$path" ]]; then
-        rm -rf "/workspace/out/test-artifacts/$path"
-        cp -a "$path" "/workspace/out/test-artifacts/$path"
-      fi
-    done
-    echo "[test] failure artifacts copied to /workspace/out/test-artifacts"
+    if [[ -e coverage ]]; then
+      rm -rf /workspace/out/test-artifacts/coverage
+      cp -a coverage /workspace/out/test-artifacts/coverage
+    fi
+    echo "[test] Playwright artifacts remain in /workspace/out/test-results and /workspace/out/playwright-report"
+    echo "[test] coverage copied to /workspace/out/test-artifacts/coverage when available"
   fi
   exit "$status"
 }

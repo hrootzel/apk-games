@@ -17,7 +17,7 @@ async function waitForArcade(page: Page) {
   await expect(page.locator('canvas.game-canvas')).toBeVisible();
 }
 
-async function launch(page: Page, gameId: 'asteroids' | 'tempest') {
+async function launch(page: Page, gameId: 'asteroids' | 'tempest' | 'phosphor-swarm') {
   await waitForArcade(page);
   const menuFrame = (await snapshot(page)).frameCount;
   await page.locator(`.arcade-menu-item[data-entry-id="${gameId}"]`).click();
@@ -66,6 +66,29 @@ async function setJoystick(page: Page, x: number, y: number) {
     if (!bridge) throw new Error('Missing E2E bridge');
     bridge.input.joystick(x, y);
   }, { x, y });
+}
+
+async function setAim(page: Page, x: number, y: number) {
+  await page.evaluate(({ x, y }) => {
+    const bridge = (window as VectorArcadeDebugWindow).__VECTOR_ARCADE_DEBUG__;
+    if (!bridge) throw new Error('Missing E2E bridge');
+    bridge.input.aim(x, y);
+  }, { x, y });
+}
+
+
+async function dragAnalog(page: Page, control: 'move-pad' | 'aim-pad', pointerId: number, dx: number, dy: number) {
+  await page.locator(`[data-control="${control}"]`).evaluate(
+    (element, { pointerId, dx, dy }) => {
+      const rect = element.getBoundingClientRect();
+      const x = rect.left + rect.width / 2;
+      const y = rect.top + rect.height / 2;
+      const common = { bubbles: true, cancelable: true, pointerId, pointerType: 'touch' };
+      element.dispatchEvent(new PointerEvent('pointerdown', { ...common, clientX: x, clientY: y, buttons: 1 }));
+      element.dispatchEvent(new PointerEvent('pointermove', { ...common, clientX: x + dx, clientY: y + dy, buttons: 1 }));
+    },
+    { pointerId, dx, dy },
+  );
 }
 
 async function resetInput(page: Page) {
@@ -124,9 +147,10 @@ test.describe('Vector Arcade shell and GPU integration', () => {
     await expect.poll(async () => (await snapshot(page)).frameCount, { timeout: 15_000 })
       .toBeGreaterThan(first.frameCount);
     await expect(page.locator('.arcade-menu')).toBeVisible();
-    await expect(page.locator('.arcade-menu-item')).toHaveCount(3);
+    await expect(page.locator('.arcade-menu-item')).toHaveCount(4);
     await expect(page.locator('.arcade-menu-item[data-entry-id="asteroids"]')).toContainText('ASTEROIDS');
     await expect(page.locator('.arcade-menu-item[data-entry-id="tempest"]')).toContainText('TEMPEST');
+    await expect(page.locator('.arcade-menu-item[data-entry-id="phosphor-swarm"]')).toContainText('PHOSPHOR SWARM');
     await expect(page.locator('.arcade-menu-item[data-entry-id="configuration"]')).toContainText('CONFIGURATION');
     expect(pageErrors).toEqual([]);
   });
@@ -137,8 +161,8 @@ test.describe('Vector Arcade shell and GPU integration', () => {
     await expect(page.locator('.settings-panel')).toBeVisible();
 
     await page.locator('input[data-setting="controlOpacity"]').fill('0.55');
-    await expect.poll(async () => (await snapshot(page)).settings.controlOpacity, { timeout: 15_000 }).toBe(0.55);
-    await expect(page.locator('output[data-value="controlOpacity"]')).toHaveText('0.55');
+    await expect.poll(async () => (await snapshot(page)).inputSettings.controlOpacity, { timeout: 15_000 }).toBe(0.55);
+    await expect(page.locator('output[data-value="input.controlOpacity"]')).toHaveText('0.55');
 
     await page.locator('.settings-close').click();
     await expect(page.locator('.arcade-menu')).toBeVisible();
@@ -178,6 +202,39 @@ test.describe('Vector Arcade shell and GPU integration', () => {
 
     await setButton(page, 'a', false, 3001);
     await setJoystick(page, 0, 0);
+  });
+
+
+  test('launches Phosphor Swarm with independent movement/aim and GPU particles', async ({ page }) => {
+    await launch(page, 'phosphor-swarm');
+    await expect(page.locator('[data-control="move-pad"]')).toBeVisible();
+    await expect(page.locator('[data-control="aim-pad"]')).toBeVisible();
+    const before = await snapshot(page);
+    const initialX = (before.game as { player: { x: number } }).player.x;
+
+    await setJoystick(page, 1, 0);
+    await setAim(page, 0, -1);
+    await setButton(page, 'a', true, 3501);
+    await expect.poll(async () => {
+      const current = await snapshot(page);
+      const game = current.game as { player: { x: number; aimAngle: number }; bullets: unknown[] };
+      return game.player.x > initialX && game.bullets.length > 0 && current.particleCount > 0;
+    }, { timeout: 15_000 }).toBe(true);
+    await setButton(page, 'a', false, 3501);
+    await setJoystick(page, 0, 0);
+    await setAim(page, 0, 0);
+  });
+
+  test('maps two simultaneous real analog PointerEvents in Phosphor Swarm', async ({ page }) => {
+    await launch(page, 'phosphor-swarm');
+    await dragAnalog(page, 'move-pad', 3601, 60, 0);
+    await dragAnalog(page, 'aim-pad', 3602, 0, -60);
+    await expect.poll(async () => {
+      const current = (await snapshot(page)).input;
+      return current.joystick.x > 0.5 && current.aim.y < -0.5 && current.buttons.a;
+    }, { timeout: 15_000 }).toBe(true);
+    await page.locator('[data-control="move-pad"]').dispatchEvent('pointercancel', { pointerId: 3601 });
+    await page.locator('[data-control="aim-pad"]').dispatchEvent('pointercancel', { pointerId: 3602 });
   });
 
   test('maps simultaneous real PointerEvents from the lower-left steering buttons', async ({ page }) => {
@@ -261,8 +318,8 @@ test.describe('Vector Arcade shell and GPU integration', () => {
     expect((await snapshot(page)).input.buttons.a).toBe(true);
     await pointerOnControl(page, 'pointerup', 'a', 92);
     const current = await snapshot(page);
-    expect(current.settings.controlSize).toBe(90);
-    expect(current.settings.controlInset).toBe(30);
+    expect(current.inputSettings.controlSize).toBe(90);
+    expect(current.inputSettings.controlInset).toBe(30);
     // Returning to the shell clears any held pointers; the next profile supplies its own controls.
     await pointerOnControl(page, 'pointerdown', 'a', 93);
     await page.keyboard.press('Escape');
@@ -284,7 +341,7 @@ test.describe('Vector Arcade shell and GPU integration', () => {
     await launch(page, 'asteroids');
     for (const viewport of [{ width: 1200, height: 800 }, { width: 800, height: 1200 }]) {
       await page.setViewportSize(viewport);
-      const bounds = await page.locator('.touch-button:visible').evaluateAll((buttons) => buttons.map((button) => {
+      const bounds = await page.locator('.touch-button:visible, .touch-analog:visible').evaluateAll((buttons) => buttons.map((button) => {
         const rect = button.getBoundingClientRect();
         return { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
       }));

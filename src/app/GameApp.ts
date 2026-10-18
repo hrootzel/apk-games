@@ -1,9 +1,11 @@
 import { Application, Text } from 'pixi.js';
 import type { ArcadeGame } from '../game/ArcadeGame';
 import type { ButtonName, InputSnapshot, VectorPath } from '../game/types';
+import { ParticleRenderer } from '../graphics/ParticleRenderer';
 import { VectorRenderer } from '../graphics/VectorRenderer';
 import { defaultGraphicsSettings } from '../graphics/settings';
 import { TouchController } from '../input/TouchController';
+import { defaultInputSettings } from '../input/settings';
 import { ArcadeMenuView } from '../ui/ArcadeMenuView';
 import { SettingsPanel } from '../ui/SettingsPanel';
 import { GAME_REGISTRY, findGame } from './gameRegistry';
@@ -14,8 +16,10 @@ export type ArcadeMode = 'menu' | 'game';
 
 export class GameApp {
   private readonly pixi = new Application();
-  private readonly settings = { ...defaultGraphicsSettings };
-  private readonly vectorRenderer = new VectorRenderer(this.settings);
+  private readonly graphicsSettings = { ...defaultGraphicsSettings };
+  private readonly inputSettings = { ...defaultInputSettings };
+  private readonly vectorRenderer = new VectorRenderer(this.graphicsSettings);
+  private readonly particleRenderer = new ParticleRenderer(this.graphicsSettings);
   private readonly touch: TouchController;
   private readonly settingsPanel: SettingsPanel;
   private readonly menuController: MenuController;
@@ -24,6 +28,7 @@ export class GameApp {
   private activeGameId: string | null = null;
   private mode: ArcadeMode = 'menu';
   private frameCount = 0;
+  private lastParticleCount = 0;
   private lastInput: InputSnapshot | null = null;
   private shellLastInput: InputSnapshot | null = null;
   private readonly hud = new Text({
@@ -39,7 +44,8 @@ export class GameApp {
   constructor(private readonly root: HTMLElement) {
     this.touch = new TouchController(root);
     this.settingsPanel = new SettingsPanel(
-      this.settings,
+      this.graphicsSettings,
+      this.inputSettings,
       () => this.applySettings(),
       () => this.showMenu(),
     );
@@ -81,7 +87,7 @@ export class GameApp {
 
     this.pixi.canvas.classList.add('game-canvas');
     this.root.prepend(this.pixi.canvas);
-    this.pixi.stage.addChild(this.vectorRenderer.container, this.hud);
+    this.pixi.stage.addChild(this.vectorRenderer.container, this.particleRenderer.container, this.hud);
     this.vectorRenderer.initialize(this.pixi.renderer, this.pixi.screen.width, this.pixi.screen.height);
     this.hud.position.set(18, 15);
     this.applySettings();
@@ -102,6 +108,8 @@ export class GameApp {
         if (selection) this.activateMenuSelection(selection);
         this.menuView.sync();
         this.vectorRenderer.render(this.menuVectorPaths(), elapsedMs);
+        this.particleRenderer.clear();
+        this.lastParticleCount = 0;
         this.hud.text = 'VECTOR ARCADE  //  FULL-COLOR PHOSPHOR SYSTEM';
       } else if (this.activeGame) {
         if (this.shellChordPressed(input)) {
@@ -109,6 +117,9 @@ export class GameApp {
         } else {
           this.activeGame.update(dtMs, input);
           this.vectorRenderer.render(this.activeGame.getVectorPaths(input), elapsedMs);
+          const particles = this.activeGame.getParticles?.() ?? [];
+          this.particleRenderer.render(particles);
+          this.lastParticleCount = particles.length;
           this.hud.text = this.activeGame.getHudText();
         }
       }
@@ -128,9 +139,11 @@ export class GameApp {
       game: this.activeGame?.exportState() ?? null,
       menu: this.menuController.getState(),
       settingsVisible: this.settingsPanel.isVisible(),
-      settings: { ...this.settings },
+      graphicsSettings: { ...this.graphicsSettings },
+      inputSettings: { ...this.inputSettings },
       hud: this.hud.text,
       renderer: this.pixi.renderer.constructor.name,
+      particleCount: this.lastParticleCount,
       screen: {
         width: this.pixi.screen.width,
         height: this.pixi.screen.height,
@@ -139,17 +152,18 @@ export class GameApp {
     };
   }
 
-  /** Test-only controller injection. Exposed to the browser only with ?e2e=1. */
   debugSetButton(button: ButtonName, pressed: boolean, pointerId = 9000): void {
     this.touch.debugSetButton(button, pressed, pointerId);
   }
 
-  /** Test-only analog joystick injection. Exposed to the browser only with ?e2e=1. */
   debugSetJoystick(x: number, y: number): void {
     this.touch.debugSetJoystick(x, y);
   }
 
-  /** Clear all injected/held controller state between E2E assertions. */
+  debugSetAim(x: number, y: number): void {
+    this.touch.debugSetAim(x, y);
+  }
+
   debugResetInput(): void {
     this.touch.debugResetInput();
   }
@@ -170,6 +184,8 @@ export class GameApp {
     this.mode = 'game';
     this.menuView.hide();
     this.settingsPanel.hide();
+    this.particleRenderer.clear();
+    this.lastParticleCount = 0;
     this.touch.setProfile(registration.touch);
     this.applySettings();
     this.touch.setVisible(true);
@@ -184,8 +200,8 @@ export class GameApp {
     this.activeGameId = null;
     this.settingsPanel.hide();
     this.menuView.show();
-    // The menu is directly touchable; hiding the gameplay overlay prevents the
-    // controls from competing visually with the program list.
+    this.particleRenderer.clear();
+    this.lastParticleCount = 0;
     this.touch.setVisible(false);
     if (heldInput) this.menuController.primeInputEdges(heldInput);
     else this.menuController.resetInputEdges();
@@ -199,11 +215,9 @@ export class GameApp {
 
   private applySettings(): void {
     this.vectorRenderer.refreshFilters();
-    this.touch.setOverlayOpacity(this.settings.controlOpacity);
-    this.touch.configure(this.settings.controlSize, this.settings.controlInset,
-      Boolean(this.settings.dragSteering), Boolean(this.settings.combinedFireThrust));
-    this.root.style.setProperty('--scanline-alpha', String(this.settings.scanlines));
-    this.root.style.setProperty('--vignette-alpha', String(this.settings.vignette));
+    this.touch.configure(this.inputSettings);
+    this.root.style.setProperty('--scanline-alpha', String(this.graphicsSettings.scanlines));
+    this.root.style.setProperty('--vignette-alpha', String(this.graphicsSettings.vignette));
   }
 
   private shellChordPressed(input: InputSnapshot): boolean {
@@ -231,28 +245,19 @@ export class GameApp {
         closed: true,
       },
       {
-        points: [
-          { x: inset * 1.4, y: midY },
-          { x: width * 0.27, y: midY },
-        ],
+        points: [{ x: inset * 1.4, y: midY }, { x: width * 0.27, y: midY }],
         color: 0x6be7ff,
         intensity: 0.38,
         width: 0.8,
       },
       {
-        points: [
-          { x: width * 0.73, y: midY },
-          { x: width - inset * 1.4, y: midY },
-        ],
+        points: [{ x: width * 0.73, y: midY }, { x: width - inset * 1.4, y: midY }],
         color: 0xf66cff,
         intensity: 0.38,
         width: 0.8,
       },
       {
-        points: [
-          { x: width * 0.5, y: inset * 1.2 },
-          { x: width * 0.5, y: height * 0.19 },
-        ],
+        points: [{ x: width * 0.5, y: inset * 1.2 }, { x: width * 0.5, y: height * 0.19 }],
         color: 0xffb64f,
         intensity: 0.3,
         width: 0.75,

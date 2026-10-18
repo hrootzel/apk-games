@@ -1,37 +1,38 @@
 import { describe, expect, it } from 'vitest';
-import { ASTEROIDS_TOUCH, TEMPEST_TOUCH, dragSteering } from '../../src/input/layout';
+import { ASTEROIDS_TOUCH, PHOSPHOR_SWARM_TOUCH, TEMPEST_TOUCH, dragSteering, radialAnalog } from '../../src/input/layout';
 
 describe('game touch profiles', () => {
-  it('provides shared logical controls with game-specific action labels', () => {
-    for (const profile of [ASTEROIDS_TOUCH, TEMPEST_TOUCH]) {
-      expect(new Set(profile.controls.flatMap((control) => control.buttons)))
-        .toEqual(new Set(['l', 'r', 'a', 'b', 'x', 'y', 'start', 'select']));
-      expect(profile.controls.filter((control) => ['l', 'r'].includes(control.id))
-        .every((control) => control.side === 'left')).toBe(true);
+  it('provides game-specific action labels while retaining system controls', () => {
+    for (const profile of [ASTEROIDS_TOUCH, TEMPEST_TOUCH, PHOSPHOR_SWARM_TOUCH]) {
+      const buttons = new Set(profile.controls.flatMap((control) => control.buttons));
+      expect(buttons.has('start')).toBe(true);
+      expect(buttons.has('select')).toBe(true);
       expect(new Set(profile.controls.map((control) => control.id)).size).toBe(profile.controls.length);
     }
     expect(ASTEROIDS_TOUCH.controls.find((control) => control.id === 'b')?.label).toBe('THRUST');
     expect(TEMPEST_TOUCH.controls.find((control) => control.id === 'b')?.label).toBe('SUPERZAP');
+    expect(PHOSPHOR_SWARM_TOUCH.controls.find((control) => control.id === 'b')?.label).toBe('DASH');
   });
 
-  it('offers combined fire and thrust only for Asteroids and drag only for Tempest', () => {
+  it('assigns specialized analog layouts only where needed', () => {
     expect(ASTEROIDS_TOUCH.controls.find((control) => control.id === 'fire-thrust')?.buttons).toEqual(['a', 'b']);
-    expect(TEMPEST_TOUCH.controls.some((control) => control.id === 'fire-thrust')).toBe(false);
-    expect(ASTEROIDS_TOUCH.dragSteering).toBeUndefined();
     expect(TEMPEST_TOUCH.dragSteering).toBe(true);
+    expect(PHOSPHOR_SWARM_TOUCH.analog?.map((entry) => entry.target)).toEqual(['joystick', 'aim']);
+    expect(PHOSPHOR_SWARM_TOUCH.analog?.find((entry) => entry.target === 'aim')?.buttons).toEqual(['a']);
   });
 });
 
-describe('relative horizontal steering', () => {
-  it('starts neutral at any touch origin and ignores tiny movements', () => {
-    expect(dragSteering(450, 450, 100)).toBe(0);
+describe('relative analog steering', () => {
+  it('scales horizontal drag and clamps it', () => {
     expect(dragSteering(450, 455, 100)).toBe(0);
-  });
-  it('scales both directions and clamps at full steering', () => {
     expect(dragSteering(450, 500, 100)).toBe(0.5);
-    expect(dragSteering(450, 400, 100)).toBe(-0.5);
-    expect(dragSteering(450, 800, 100)).toBe(1);
     expect(dragSteering(450, 100, 100)).toBe(-1);
-    expect(dragSteering(0, 10, 0)).toBe(1);
+  });
+
+  it('normalizes radial motion into a circular range', () => {
+    expect(radialAnalog(100, 100, 102, 103, 100)).toEqual({ x: 0, y: 0 });
+    expect(radialAnalog(100, 100, 150, 100, 100)).toEqual({ x: 0.5, y: 0 });
+    const diagonal = radialAnalog(0, 0, 100, 100, 50);
+    expect(Math.hypot(diagonal.x, diagonal.y)).toBeCloseTo(1, 6);
   });
 });

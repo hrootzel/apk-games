@@ -7,11 +7,6 @@ export interface GraphicsSettings {
   jitter: number;
   scanlines: number;
   vignette: number;
-  controlOpacity: number;
-  controlSize: number;
-  controlInset: number;
-  dragSteering: number;
-  combinedFireThrust: number;
 }
 
 export const defaultGraphicsSettings: GraphicsSettings = {
@@ -23,9 +18,4 @@ export const defaultGraphicsSettings: GraphicsSettings = {
   jitter: 0.42,
   scanlines: 0.18,
   vignette: 0.32,
-  controlOpacity: 0.55,
-  controlSize: 76,
-  controlInset: 16,
-  dragSteering: 0,
-  combinedFireThrust: 1,
 };

@@ -3,9 +3,11 @@ import type { InputSnapshot } from '../../src/game/types';
 export function input(
   buttons: Partial<InputSnapshot['buttons']> = {},
   joystick: InputSnapshot['joystick'] = { x: 0, y: 0 },
+  aim: InputSnapshot['aim'] = { x: 0, y: 0 },
 ): InputSnapshot {
   return {
     joystick,
+    aim,
     buttons: {
       a: false,
       b: false,

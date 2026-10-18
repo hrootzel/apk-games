@@ -1,19 +1,26 @@
 import type { ButtonName, InputSnapshot, Vec2 } from '../game/types';
-import { dragSteering, type TouchProfile } from './layout';
+import { dragSteering, radialAnalog, type TouchAnalogControl, type TouchProfile } from './layout';
+import type { InputSettings } from './settings';
 
 const BUTTONS: ButtonName[] = ['a', 'b', 'x', 'y', 'l', 'r', 'start', 'select'];
+type AnalogTarget = 'joystick' | 'aim';
 
 interface PointerBinding {
   buttons: readonly ButtonName[];
-  drag: boolean;
+  target?: AnalogTarget;
+  horizontalOnly?: boolean;
   startX: number;
+  startY: number;
+  travel: number;
 }
 
 export class TouchController {
   private readonly pointerBindings = new Map<number, PointerBinding>();
   private readonly pressed = new Map<ButtonName, Set<number>>();
   private joystickPointer: number | null = null;
+  private aimPointer: number | null = null;
   private joystick: Vec2 = { x: 0, y: 0 };
+  private aim: Vec2 = { x: 0, y: 0 };
   private readonly keys = new Set<string>();
 
   private readonly overlay: HTMLDivElement;
@@ -47,9 +54,15 @@ export class TouchController {
     this.profile = profile;
     this.labelByButton.clear();
     this.overlay.replaceChildren();
+
     for (const side of ['left', 'right', 'system'] as const) {
       const group = document.createElement('div');
       group.className = `control-group controls-${side}`;
+
+      for (const analog of profile.analog?.filter((entry) => entry.side === side) ?? []) {
+        group.appendChild(this.createAnalogPad(analog));
+      }
+
       for (const control of profile.controls.filter((entry) => entry.side === side)) {
         const button = document.createElement('button');
         button.type = 'button';
@@ -62,6 +75,7 @@ export class TouchController {
       }
       this.overlay.appendChild(group);
     }
+
     if (profile.dragSteering) {
       const strip = document.createElement('div');
       strip.className = 'steering-strip';
@@ -71,18 +85,17 @@ export class TouchController {
     }
   }
 
-  configure(size: number, inset: number, drag: boolean, combined: boolean): void {
-    const useDrag = drag && Boolean(this.profile.dragSteering);
+  configure(settings: InputSettings): void {
+    const useDrag = Boolean(settings.dragSteering) && Boolean(this.profile.dragSteering);
+    const combined = Boolean(settings.combinedFireThrust);
     if (this.overlay.classList.contains('use-drag') !== useDrag
       || this.overlay.classList.contains('use-combined') !== combined) this.debugResetInput();
-    this.overlay.style.setProperty('--control-size', `${size}px`);
-    this.overlay.style.setProperty('--control-inset', `${inset}px`);
+    this.overlay.style.setProperty('--control-size', `${settings.controlSize}px`);
+    this.overlay.style.setProperty('--control-inset', `${settings.controlInset}px`);
+    this.overlay.style.setProperty('--control-opacity', String(settings.controlOpacity));
     this.overlay.classList.toggle('use-drag', useDrag);
     this.overlay.classList.toggle('use-combined', combined);
-  }
-
-  setOverlayOpacity(opacity: number): void {
-    this.overlay.style.setProperty('--control-opacity', String(opacity));
+    this.overlay.classList.toggle('use-analog', Boolean(this.profile.analog?.length));
   }
 
   setVisible(visible: boolean): void {
@@ -91,11 +104,7 @@ export class TouchController {
     this.overlay.classList.toggle('hidden', !visible);
   }
 
-  /**
-   * Test-only input injection used by the browser E2E bridge. Production input
-   * still comes exclusively from Pointer Events and keyboard events; these
-   * methods are only exposed by main.ts when the app is loaded with ?e2e=1.
-   */
+  /** Test-only button injection used by the browser E2E bridge. */
   debugSetButton(button: ButtonName, pressed: boolean, pointerId = 9000): void {
     const pointers = this.pressed.get(button);
     if (!pointers) return;
@@ -105,17 +114,19 @@ export class TouchController {
   }
 
   debugSetJoystick(x: number, y: number): void {
-    const clampedX = Math.max(-1, Math.min(1, Number.isFinite(x) ? x : 0));
-    const clampedY = Math.max(-1, Math.min(1, Number.isFinite(y) ? y : 0));
-    const length = Math.hypot(clampedX, clampedY);
-    const scale = length > 1 ? 1 / length : 1;
-    this.joystick = { x: clampedX * scale, y: clampedY * scale };
+    this.joystick = this.clampVector(x, y);
+  }
+
+  debugSetAim(x: number, y: number): void {
+    this.aim = this.clampVector(x, y);
   }
 
   debugResetInput(): void {
     this.pointerBindings.clear();
     this.joystickPointer = null;
+    this.aimPointer = null;
     this.joystick = { x: 0, y: 0 };
+    this.aim = { x: 0, y: 0 };
     this.keys.clear();
     for (const button of BUTTONS) {
       this.pressed.get(button)?.clear();
@@ -126,6 +137,8 @@ export class TouchController {
   snapshot(): InputSnapshot {
     const keyboardTurn = (this.keys.has('ArrowRight') ? 1 : 0) - (this.keys.has('ArrowLeft') ? 1 : 0);
     const keyboardVertical = (this.keys.has('ArrowDown') ? 1 : 0) - (this.keys.has('ArrowUp') ? 1 : 0);
+    const keyboardAimX = (this.keys.has('KeyL') ? 1 : 0) - (this.keys.has('KeyJ') ? 1 : 0);
+    const keyboardAimY = (this.keys.has('KeyK') ? 1 : 0) - (this.keys.has('KeyI') ? 1 : 0);
 
     const buttons = Object.fromEntries(
       BUTTONS.map((button) => [button, (this.pressed.get(button)?.size ?? 0) > 0]),
@@ -141,12 +154,21 @@ export class TouchController {
     buttons.y ||= this.keys.has('KeyY');
 
     return {
-      joystick: {
-        x: Math.max(-1, Math.min(1, this.joystick.x + keyboardTurn)),
-        y: Math.max(-1, Math.min(1, this.joystick.y + keyboardVertical)),
-      },
+      joystick: this.clampVector(this.joystick.x + keyboardTurn, this.joystick.y + keyboardVertical),
+      aim: this.clampVector(this.aim.x + keyboardAimX, this.aim.y + keyboardAimY),
       buttons,
     };
+  }
+
+  private createAnalogPad(analog: TouchAnalogControl): HTMLElement {
+    const pad = document.createElement('div');
+    pad.className = `touch-analog touch-analog-${analog.target}`;
+    pad.dataset.analog = analog.id;
+    pad.dataset.control = analog.id;
+    pad.setAttribute('role', 'button');
+    pad.setAttribute('aria-label', analog.label);
+    pad.innerHTML = `<span>${analog.label}</span><i></i>`;
+    return pad;
   }
 
   private onPointerDown = (event: PointerEvent): void => {
@@ -154,21 +176,36 @@ export class TouchController {
     if (!this.visible || (event.target as HTMLElement | null)?.closest('[data-ui="true"]')) return;
     const element = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-control]');
     if (!element || !this.overlay.contains(element)) return;
-    const drag = element.dataset.control === 'drag';
-    if (drag && this.joystickPointer !== null) return;
+
+    const analog = this.profile.analog?.find((entry) => entry.id === element.dataset.control);
+    const legacyDrag = element.dataset.control === 'drag';
     const control = this.profile.controls.find((entry) => entry.id === element.dataset.control);
-    if (!drag && !control) return;
+    if (!analog && !legacyDrag && !control) return;
+
+    const target: AnalogTarget | undefined = analog?.target ?? (legacyDrag ? 'joystick' : undefined);
+    if (target === 'joystick' && this.joystickPointer !== null) return;
+    if (target === 'aim' && this.aimPointer !== null) return;
+
     event.preventDefault();
     try {
       this.root.setPointerCapture?.(event.pointerId);
     } catch {
       // Synthetic PointerEvents cannot always be captured.
     }
-    this.pointerBindings.set(event.pointerId, {
-      buttons: control?.buttons ?? [], drag, startX: event.clientX,
-    });
-    if (drag) this.joystickPointer = event.pointerId;
-    for (const button of control?.buttons ?? []) {
+
+    const rect = element.getBoundingClientRect();
+    const binding: PointerBinding = {
+      buttons: analog?.buttons ?? control?.buttons ?? [],
+      target,
+      horizontalOnly: legacyDrag,
+      startX: event.clientX,
+      startY: event.clientY,
+      travel: Math.max(42, Math.min(rect.width || 84, rect.height || 84) * 0.45),
+    };
+    this.pointerBindings.set(event.pointerId, binding);
+    if (target === 'joystick') this.joystickPointer = event.pointerId;
+    if (target === 'aim') this.aimPointer = event.pointerId;
+    for (const button of binding.buttons) {
       this.pressed.get(button)?.add(event.pointerId);
       this.updateButtonVisual(button);
     }
@@ -176,39 +213,59 @@ export class TouchController {
 
   private onPointerMove = (event: PointerEvent): void => {
     const pointer = this.pointerBindings.get(event.pointerId);
-    if (!pointer?.drag) return;
+    if (!pointer?.target) return;
     event.preventDefault();
-    const travel = this.overlay.querySelector('.steering-strip')!.getBoundingClientRect().width * 0.35;
-    this.joystick = { x: dragSteering(pointer.startX, event.clientX, travel), y: 0 };
+    const vector = pointer.horizontalOnly
+      ? { x: dragSteering(pointer.startX, event.clientX, pointer.travel), y: 0 }
+      : radialAnalog(pointer.startX, pointer.startY, event.clientX, event.clientY, pointer.travel);
+    if (pointer.target === 'joystick') this.joystick = vector;
+    else this.aim = vector;
   };
 
   private onPointerUp = (event: PointerEvent): void => {
     const pointer = this.pointerBindings.get(event.pointerId);
     if (!pointer) return;
-    if (event.cancelable) event.preventDefault();
-    if (pointer.drag) {
-      this.joystickPointer = null;
-      this.joystick = { x: 0, y: 0 };
-    }
     for (const button of pointer.buttons) {
       this.pressed.get(button)?.delete(event.pointerId);
       this.updateButtonVisual(button);
     }
+    if (pointer.target === 'joystick' && this.joystickPointer === event.pointerId) {
+      this.joystickPointer = null;
+      this.joystick = { x: 0, y: 0 };
+    }
+    if (pointer.target === 'aim' && this.aimPointer === event.pointerId) {
+      this.aimPointer = null;
+      this.aim = { x: 0, y: 0 };
+    }
     this.pointerBindings.delete(event.pointerId);
+    try {
+      if (this.root.hasPointerCapture?.(event.pointerId)) this.root.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Browser synthetic input may not have a capture to release.
+    }
   };
 
-  private updateButtonVisual(button: ButtonName): void {
-    this.labelByButton.get(button)?.classList.toggle('active', (this.pressed.get(button)?.size ?? 0) > 0);
-    this.overlay.querySelector('[data-control="fire-thrust"]')?.classList.toggle('active',
-      (this.pressed.get('a')?.size ?? 0) > 0 && (this.pressed.get('b')?.size ?? 0) > 0);
-  }
-
   private onKeyDown = (event: KeyboardEvent): void => {
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(event.code)) event.preventDefault();
+    if ((event.target as HTMLElement | null)?.matches('input, textarea, select')) return;
     this.keys.add(event.code);
   };
 
   private onKeyUp = (event: KeyboardEvent): void => {
     this.keys.delete(event.code);
   };
+
+  private updateButtonVisual(button: ButtonName): void {
+    this.labelByButton.get(button)?.classList.toggle('active', (this.pressed.get(button)?.size ?? 0) > 0);
+  }
+
+  private clampVector(x: number, y: number): Vec2 {
+    let safeX = Number.isFinite(x) ? x : 0;
+    let safeY = Number.isFinite(y) ? y : 0;
+    const length = Math.hypot(safeX, safeY);
+    if (length > 1) {
+      safeX /= length;
+      safeY /= length;
+    }
+    return { x: Math.max(-1, Math.min(1, safeX)), y: Math.max(-1, Math.min(1, safeY)) };
+  }
 }

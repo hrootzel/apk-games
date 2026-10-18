@@ -1,6 +1,6 @@
 # Invoke scripts through Bash: Git/Windows checkouts may not preserve executable bits.
 x-image: &image
-  image: vector-arcade-local:0.4.4
+  image: vector-arcade-local:0.5.0
   build:
     context: .
   working_dir: /workspace

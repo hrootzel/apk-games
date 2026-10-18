@@ -88,7 +88,7 @@ body {
   right: var(--control-inset);
   grid-template-columns: repeat(2, auto);
 }
-.touch-button, .steering-strip {
+.touch-button, .steering-strip, .touch-analog {
   pointer-events: auto;
   touch-action: none;
   user-select: none;
@@ -103,6 +103,29 @@ body {
   min-height: calc(var(--button-size) * 0.65);
 }
 .touch-button.primary { min-height: var(--button-size); border-width: 2px; }
+.touch-analog {
+  grid-column: 1 / -1;
+  width: calc(var(--button-size) * 2 + 8px);
+  height: calc(var(--button-size) * 1.42);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border-width: 2px;
+  background: radial-gradient(circle at center, rgba(72, 238, 255, 0.10), rgba(2, 18, 24, 0.54) 62%);
+}
+.touch-analog span { font-size: 10px; letter-spacing: 0.11em; }
+.touch-analog i {
+  display: block;
+  width: calc(var(--button-size) * 0.52);
+  height: calc(var(--button-size) * 0.52);
+  border-radius: 50%;
+  border: 1px solid rgba(190, 252, 255, calc(var(--control-opacity) * 0.8));
+  box-shadow: 0 0 18px rgba(90, 240, 255, 0.10) inset;
+}
+.touch-analog-aim { border-color: rgba(255, 106, 224, var(--control-opacity)); color: rgba(255, 190, 238, var(--control-opacity)); }
+.use-analog .controls-left, .use-analog .controls-right { align-items: end; }
 .touch-button.active { color: white; background: rgba(50, 180, 210, 0.45); }
 .touch-button[data-control="l"] { grid-column: 1; grid-row: 2; font-size: 26px; }
 .touch-button[data-control="r"] { grid-column: 2; grid-row: 2; font-size: 26px; }
@@ -165,6 +188,15 @@ body {
 .settings-row input { width: 100%; }
 .settings-row input[type="checkbox"] { width: 24px; height: 24px; justify-self: end; }
 .settings-row output { text-align: right; color: #eafff8; }
+.settings-section-title {
+  margin: 14px 0 3px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(112, 249, 221, 0.18);
+  color: rgba(157, 255, 230, 0.72);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+}
+.settings-header + .settings-section-title { margin-top: 0; padding-top: 0; border-top: 0; }
 .settings-help { margin-top: 14px; line-height: 1.55; color: rgba(190, 255, 235, 0.66); font-size: 11px; }
 
 @media (max-width: 700px) {

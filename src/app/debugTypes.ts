@@ -1,5 +1,6 @@
 import type { ButtonName, InputSnapshot } from '../game/types';
 import type { GraphicsSettings } from '../graphics/settings';
+import type { InputSettings } from '../input/settings';
 import type { MenuController } from './MenuController';
 
 export interface ArcadeDebugSnapshot {
@@ -11,9 +12,11 @@ export interface ArcadeDebugSnapshot {
   game: unknown;
   menu: ReturnType<MenuController['getState']>;
   settingsVisible: boolean;
-  settings: GraphicsSettings;
+  graphicsSettings: GraphicsSettings;
+  inputSettings: InputSettings;
   hud: string;
   renderer: string;
+  particleCount: number;
   screen: {
     width: number;
     height: number;
@@ -27,6 +30,7 @@ export interface VectorArcadeE2EBridge {
     press: (button: ButtonName, pointerId?: number) => void;
     release: (button: ButtonName, pointerId?: number) => void;
     joystick: (x: number, y: number) => void;
+    aim: (x: number, y: number) => void;
     reset: () => void;
   };
 }

@@ -1,96 +1,44 @@
-# AGENTS.md — Vector Arcade
+# AGENTS.md — Vector Arcade 0.5.0
 
 ## Project intent
+Tablet-first Android/browser arcade using TypeScript + PixiJS 8. Games emit platform-neutral geometry/particle snapshots; Pixi owns WebGL presentation. Keep game simulation free of Pixi imports.
 
-This is a tablet-first, full-color vector arcade for Android and browsers.
-TypeScript game simulations emit geometric `VectorPath[]` data. PixiJS owns the
-GPU/WebGL presentation layer, including the ping-pong phosphor feedback surface.
-Do not convert games into sprite/raster engines unless explicitly requested.
+## Programs
+- `asteroids` — free-flight vector survival.
+- `tempest` — pseudo-3D chromatic tube shooter.
+- `phosphor-swarm` — twin-stick neon arena using the shared vector renderer plus Pixi `ParticleContainer` sparks.
+- `configuration` — shell-level display/input settings.
 
-## Current programs
+Games register through `src/app/gameRegistry.ts`.
 
-- `asteroids` — free-flight vector Asteroids clone.
-- `tempest` — pseudo-3D chromatic vector tube shooter.
-- `configuration` — shell-level global display/input settings entry.
+## Architecture
+1. Games live under `src/game/` and implement `ArcadeGame`.
+2. Vector geometry uses `VectorPath[]`; optional high-volume effects use `ArcadeParticle[]` and `ParticleRenderer`.
+3. `GraphicsSettings` contains only CRT/phosphor/display calibration. `InputSettings` contains touch-overlay/input behavior.
+4. `InputSnapshot.joystick` is movement/primary steering; `InputSnapshot.aim` is an independent aim vector for twin-stick games.
+5. Touch layouts are per-game `TouchProfile`s. Preserve keyboard and `?e2e=1` deterministic input bridge support.
+6. Clear held inputs on cancellation, focus loss, resize, profile transitions, and shell transitions.
+7. Start+Select returns to the shell; Escape is the desktop equivalent.
 
-Games are registered in `src/app/gameRegistry.ts`; the shell must discover them
-through that registry rather than hard-coding game classes into menu markup.
-
-## Architecture rules
-
-1. Game simulation code belongs under `src/game/` and must not import PixiJS.
-2. Each game implements the small `ArcadeGame` contract: resize, update,
-   vector-path emission, HUD text, and serializable debug state.
-3. Randomness in simulations must be injectable for deterministic tests.
-4. Shared logical input remains A/B/X/Y + L/R + Start/Select + analog axes.
-   Touch layouts are per-game profiles declared through the game registry:
-   lower-left steering, lower-right labeled actions, and a clear screen center.
-   Use explicit DOM hit targets, not screen-wide quadrants. Asteroids offers
-   Fire + Thrust; Tempest offers optional horizontal drag steering. Control size
-   and edge spacing are configurable. Retain keyboard and deterministic input
-   bridge support; clear held touch input on cancellation, focus loss, and
-   shell/profile transitions.
-5. The top-level menu and configuration are shell concerns; game code must not
-   own DOM navigation.
-6. The CRT/vector appearance comes primarily from GPU beam/phosphor rendering,
-   not from a decorative scanline overlay.
-7. Start+Select is the universal touch-controller chord for returning to the
-   arcade shell. Escape is the desktop/debug equivalent.
-
-## Required validation
-
-Before considering a change complete, run inside the Docker toolchain:
+## Validation
+Run:
 
 ```bash
-docker compose run --rm test
+docker compose run --rm --build test
 ```
 
-This must pass strict TypeScript, Vitest coverage, production Vite compilation,
-and Playwright Chromium/WebGL integration tests.
+This must pass layout checks, strict TypeScript, Vitest coverage, production Vite build, and headed Chromium/WebGL Playwright tests under Xvfb.
 
-Invoke shell scripts explicitly with `bash` in Compose, npm scripts, and nested
-script calls; fresh Git checkouts may not preserve executable permissions. Keep
-shell scripts LF-terminated via `.gitattributes`.
-
-GitHub Actions runs the same suite through `.github/workflows/ci.yml` on pushes
-and pull requests. Keep CI on the shared Compose `test` service; do not duplicate
-or weaken its checks in workflow YAML. CI must build the checked-out source into
-the image before testing and preserve browser failure artifacts. Upload test
-artifacts only for failed test runs with one-day retention; keep automatic Docker
-build-record artifact uploads disabled. Preserve layer caching without publishing
-images or archiving them as artifacts.
-
-APK builds are gated by that same suite:
+APK builds are hard-gated:
 
 ```bash
-docker compose run --rm apk
+docker compose run --rm --build apk
 ```
 
-Never bypass the test gate in `scripts/build-apk.sh` to make a build appear to
-work.
+GitHub Actions runs the same test service and then runs `scripts/assemble-android.sh` separately so Android/JDK/Gradle failures cannot pass CI. Failure artifacts live under `out/`; successful CI uploads the debug APK for three days.
 
-## Tests to add with new games/features
+## Dependencies
+Dependencies are image-baked at `/opt/vector-arcade-deps`. Do not add runtime `npm install` calls. A committed `package-lock.json` is preferred and causes the Dockerfile to use `npm ci`; until one is present, CI emits a reproducibility warning.
 
-Every new game needs deterministic tests for controls, movement/state evolution,
-collisions/scoring, lifecycle/reset behavior, export/import, and representative
-`VectorPath` generation. Every new shell/menu flow needs a pure unit-testable
-state model where practical plus at least one Playwright end-to-end path.
-
-## Container dependency model (v0.4.4)
-
-Do not add runtime `npm install` / `npm ci` calls to build or test scripts.
-Dependencies are baked into the image at `/opt/vector-arcade-deps`; after package
-metadata changes, rebuild with `docker compose build`. Immutable `test`, `web`,
-and `apk` services use the source snapshot baked into the image. Interactive
-`dev` and `shell` services bind-mount the checkout but resolve packages from the
-image. See `CACHING.md` before changing this model.
-
-## E2E input policy
-
-Browser integration tests load `/?e2e=1` and may use the deterministic
-`window.__VECTOR_ARCADE_DEBUG__.input` bridge for controller/game state. Do not
-replace this with fixed-duration synthetic pointer pulses. Keep at least one
-real DOM PointerEvent smoke test against the visible touch overlay so browser
-event wiring remains covered. Multi-button chords must be injected atomically
-in one page task and assertions should wait on observable state with bounded
-`expect.poll(...)` timeouts rather than `waitForTimeout(...)`.
+## Tests for new games
+Add deterministic coverage for movement/input, collision/scoring, lifecycle/reset, serialization, representative vectors, particles if used, and at least one Playwright launch/input path.

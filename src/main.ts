@@ -18,6 +18,7 @@ async function main(): Promise<void> {
         press: (button, pointerId = 9000) => arcade.debugSetButton(button, true, pointerId),
         release: (button, pointerId = 9000) => arcade.debugSetButton(button, false, pointerId),
         joystick: (x, y) => arcade.debugSetJoystick(x, y),
+        aim: (x, y) => arcade.debugSetAim(x, y),
         reset: () => arcade.debugResetInput(),
       },
     };

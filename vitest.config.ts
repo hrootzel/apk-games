@@ -12,11 +12,13 @@ export default defineConfig({
       include: [
         'src/game/AsteroidsGame.ts',
         'src/game/TempestGame.ts',
+        'src/game/PhosphorSwarmGame.ts',
         'src/app/MenuController.ts',
         'src/app/gameRegistry.ts',
         'src/input/layout.ts',
         'src/graphics/phosphorMath.ts',
         'src/graphics/settings.ts',
+        'src/input/settings.ts',
       ],
       thresholds: {
         lines: 80,
