@@ -56,10 +56,31 @@ Chromium, the Android SDK, Java, and npm dependencies are installed into the ima
 No registry credentials or additional repository secrets are required. Superseded
 runs on the same branch or pull request are canceled.
 
-Download browser reports, failure traces/screenshots/videos, and control-layout
-screenshots from the run's `test-reports` artifact (retained for 14 days). Coverage
-reports are included when the test script preserves failure artifacts. Build
-failures before tests start may have no test artifacts; inspect the Actions log.
+Only failed test runs upload a `test-reports` artifact, retained for **one day**.
+It contains the browser HTML report (including available traces/screenshots/videos),
+control-layout screenshots, and any preserved coverage report. Successful runs
+upload no test artifacts. Docker build-record uploads are disabled, and no
+container images are published to a registry. Console logs and job summaries
+remain available. Build failures before tests start have no test artifact.
+
+To control storage and spending on GitHub:
+
+- Keep the repository's Actions cache size eviction limit at **10 GB or less**;
+  this is separate from the artifact storage allowance. Older caches are evicted
+  automatically at the configured limit.
+- Under account/organization **Billing & licensing → Budgets and alerts**, set
+  an Actions budget appropriate for no paid overages (for example, $0) with
+  **Stop usage when budget limit is reached** enabled where available. Check
+  Actions cache storage budget settings as well. Alerts alone do not stop usage.
+- Review existing artifacts in the Actions tab and delete unwanted old reports
+  or `.dockerbuild` records. The new policy applies to future uploads; it does
+  not shorten existing artifacts' retention or reverse accrued charges.
+
+Workflow retention reduces storage use; it cannot guarantee zero charges across
+an account. Existing usage, other repositories, and runner minutes also matter.
+Repository cache limits and billing settings must be configured on GitHub; this
+workflow does not change them. See [GitHub Actions billing](https://docs.github.com/en/billing/concepts/product-billing/github-actions)
+and [budget setup](https://docs.github.com/en/billing/how-tos/set-up-budgets).
 
 After the workflow has run on GitHub, configure a branch protection rule or
 ruleset for the default branch and require **Docker test gate** to pass before

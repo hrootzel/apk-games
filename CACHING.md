@@ -61,6 +61,29 @@ when package metadata changes, npm may need to download packages again. Cache
 availability affects build speed, not which checks run. No cache or registry
 credentials need to be configured manually.
 
+## CI artifact retention and storage limits
+
+The workflow uploads diagnostics only when the test step fails, with a one-day
+retention period. The HTML browser report already includes its diagnostic data,
+so CI does not also upload the duplicate raw `out/test-results` directory.
+Successful runs upload no test reports. Docker's automatic `.dockerbuild`
+artifact upload is disabled via `DOCKER_BUILD_RECORD_UPLOAD=false`; its console
+logs and build summary remain enabled. Images are loaded locally on the runner
+and are not published or archived as artifacts.
+
+The layer cache remains enabled. Keep GitHub's repository cache size eviction
+limit at or below the included 10 GB rather than opting into paid extra storage.
+A fixed BuildKit scope does not impose a byte limit: GitHub can hold cache entries
+for multiple branch/PR refs. GitHub's configured cache eviction limit bounds that
+storage. See [cache usage limits](https://docs.github.com/en/actions/reference/workflows-and-actions/dependency-caching#usage-limits-and-eviction-policy).
+
+Artifact retention and cache settings are separate from account billing controls.
+Use [Budgets and alerts](https://docs.github.com/en/billing/how-tos/set-up-budgets)
+with a stop-usage budget for Actions and review cache storage budgets to constrain
+paid overages. Existing artifacts keep their previous expiration unless deleted;
+removing them stops future storage accrual but does not reverse past usage.
+No account settings or existing artifacts are changed by this workflow update.
+
 ## Shell script permissions across WSL and GitHub
 
 Git tracks the shell scripts as non-executable files (`100644`). WSL checkouts

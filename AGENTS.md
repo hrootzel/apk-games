@@ -55,7 +55,10 @@ shell scripts LF-terminated via `.gitattributes`.
 GitHub Actions runs the same suite through `.github/workflows/ci.yml` on pushes
 and pull requests. Keep CI on the shared Compose `test` service; do not duplicate
 or weaken its checks in workflow YAML. CI must build the checked-out source into
-the image before testing and preserve browser failure artifacts.
+the image before testing and preserve browser failure artifacts. Upload test
+artifacts only for failed test runs with one-day retention; keep automatic Docker
+build-record artifact uploads disabled. Preserve layer caching without publishing
+images or archiving them as artifacts.
 
 APK builds are gated by that same suite:
 

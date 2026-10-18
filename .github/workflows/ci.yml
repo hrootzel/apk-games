@@ -37,6 +37,9 @@ jobs:
 
       - name: Build and load the test image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
+        env:
+          # Keep console logs and summaries without retaining .dockerbuild artifacts.
+          DOCKER_BUILD_RECORD_UPLOAD: "false"
         with:
           context: .
           load: true
@@ -46,17 +49,18 @@ jobs:
           cache-to: type=gha,mode=max,scope=vector-arcade
 
       - name: Run the complete container test gate
+        id: tests
         run: docker compose run --rm --pull never test
 
-      - name: Upload test reports and screenshots
-        if: ${{ !cancelled() }}
+      - name: Upload failed-test diagnostics
+        if: ${{ failure() && steps.tests.outcome == 'failure' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: test-reports-${{ github.run_attempt }}
           path: |
             out/playwright-report/
-            out/test-results/
-            out/test-artifacts/
+            out/test-artifacts/coverage/
             out/controls-*.png
           if-no-files-found: ignore
-          retention-days: 14
+          # Minimum retention: successful runs upload nothing.
+          retention-days: 1
